@@ -1,33 +1,90 @@
+// import 'styles.css';
+
 const { Alert, Card, Button, Table, Form, Row, Col, Container} = ReactBootstrap;
 
 const firebaseConfig = {
-    apiKey: "AIzaSyChd5kiWywUOAh3XYCn_02hWY0jmjJGRzM",
-    authDomain: "projectfinalwebapplication2568.firebaseapp.com",
-    projectId: "projectfinalwebapplication2568",
-    storageBucket: "projectfinalwebapplication2568.firebasestorage.app",
-    messagingSenderId: "286234441326",
-    appId: "1:286234441326:web:5bbf1d4ab1328289c9187f",
-    measurementId: "G-5X234SBLE7"
-};
+    apiKey: "AIzaSyC5-rP8Y58aNy42NWkaIguYqhcsRS6-Ies",
+    authDomain: "projectfinalwebapplication2025.firebaseapp.com",
+    projectId: "projectfinalwebapplication2025",
+    storageBucket: "projectfinalwebapplication2025.firebasestorage.app",
+    messagingSenderId: "208273531610",
+    appId: "1:208273531610:web:9e63062d6509fb92da7be3",
+    measurementId: "G-TPXDL65PBG"
+  };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+
 function LandingPage({ onLogin }) {
     return (
-        <div style={{ textAlign: "center", padding: "200px" }}>
-            <h2>ระบบจัดการห้องเรียนของอาจารย์</h2>
-            <p>กรุณาเข้าสู่ระบบเพื่อจัดการรายวิชา</p>
-            <Button variant="primary" onClick={onLogin}>
-                <img
-                    src="https://w7.pngwing.com/pngs/882/225/png-transparent-google-logo-google-logo-google-search-icon-google-text-logo-business-thumbnail.png"
-                    alt="Google Logo"
-                    width="20"
-                    height="20"
-                    style={{ marginRight: "8px" }}
-                />เข้าสู่ระบบด้วย Google</Button>
+        <div style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100vh",
+            backgroundImage: `url(./img/landscape.jpg)`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundAttachment: "fixed"
+        }}>
+        <div style={{
+            background: "rgba(255, 255, 255, 0.9)",  // เพิ่ม opacity ให้มากขึ้น
+            padding: "60px",  // เพิ่มกรอบ (padding) ให้ใหญ่ขึ้น
+            borderRadius: "15px",  // เพิ่มมุมโค้งให้กรอบ
+            boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.2)",  // เพิ่มความเข้มของเงากรอบ
+            textAlign: "center",
+            maxWidth: "500px"  // เพิ่มขนาดกรอบให้กว้างขึ้น
+        }}>
+        <h2 style={{
+            color: "#333", 
+            marginBottom: "15px", 
+            fontFamily: "Arial, sans-serif", 
+            fontSize: "30px", 
+            fontWeight: "600"
+        }}>
+            Professor Classroom Management System
+        </h2>
+        <p style={{
+            color: "#666", 
+            marginBottom: "20px", 
+            fontFamily: "Arial, sans-serif", 
+            fontSize: "16px"
+        }}>
+            Please log in to manage your courses
+        </p>
+        <Button
+            variant="light"
+            onClick={onLogin}
+            style={{
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid #ddd",
+                padding: "10px 20px",
+                borderRadius: "8px",
+                fontSize: "16px",
+                fontWeight: "bold",
+                color: "#444",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+            }}
+            onMouseOver={(e) => e.target.style.backgroundColor = "#f0f0f0"}
+            onMouseOut={(e) => e.target.style.backgroundColor = "white"}
+        >
+            <img
+                src="https://w7.pngwing.com/pngs/882/225/png-transparent-google-logo-google-logo-google-search-icon-google-text-logo-business-thumbnail.png"
+                alt="Google Logo"
+                width="24"
+                height="24"
+                style={{ marginRight: "10px" }}
+            />
+            Log in with Google
+        </Button>
         </div>
+    </div>
     );
 }
+
+
 
 function EditProfile({ user, app }) {
     // ตรวจสอบว่ามี user หรือไม่
@@ -371,28 +428,64 @@ class App extends React.Component {
         if (!this.state.user) return <LandingPage onLogin={this.google_login} />;
         return (
             <Card>
-                <Card.Header>
-                    <img src={this.state.user.photoURL} alt="Profile" width="50" className="rounded-circle" />{' '}
-                    {this.state.user.displayName} ({this.state.user.email}){' '}
-                    <Button variant="primary" onClick={() => this.setState({ scene: "addSubject" })}>เพิ่มวิชา</Button>{' '}
-                    <Button variant="secondary" onClick={() => this.setState({ scene: "editProfile" })}>แก้ไขโปรไฟล์</Button>{' '}
-                    <Button variant="danger" onClick={this.google_logout}>ออกจากระบบ</Button>
-
-                </Card.Header>
-                <Card.Body>
-                    {this.state.scene === "addSubject" ? (
-                        <AddSubject user={this.state.user} app={this} />
-                    ) : this.state.scene === "editProfile" ? (
-                        <EditProfile user={this.state.user} app={this} />
-                    ) : this.state.scene === "manageCourse" ? (
-                        <ManagaCourse course={this.state.currentCourse} app={this} />
-                    ) : (
-                        <AllCourses data={this.state.courses} app={this} />
-                    )}
-                </Card.Body>
+                <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    backgroundColor: "#f9d5cd",
+                    height: "100vh",
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    backgroundAttachment: "fixed",
+                    padding: "20px"
+                    
+                }}>
+                    <Card.Header style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "#ffffff",
+                        padding: "20px",
+                        borderRadius: "12px",
+                        boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
+                        width: "100%",
+                        textAlign: "center"
+                    }}>
+                        <img src={this.state.user.photoURL} alt="Profile" width="150" className="rounded-circle" style={{ marginBottom: "15px" }} />
+                        <h4 style={{ marginBottom: "10px", fontSize: "30px"}}>{this.state.user.displayName}</h4>
+                        <p style={{ color: "#777", marginBottom: "20px" , fontSize: "18px"}}>({this.state.user.email})</p>
+    
+                        <div style={{ display: "flex", flexDirection: "row", gap: "10px", width: "25%" ,height: "55px"}}>
+                            <Button variant="primary" onClick={() => this.setState({ scene: "addSubject" })} style={{ width: "100%" }}>
+                                เพิ่มวิชา
+                            </Button>
+                            <Button variant="secondary" onClick={() => this.setState({ scene: "editProfile" })} style={{ width: "100%" }}>
+                                แก้ไขโปรไฟล์
+                            </Button>
+                            <Button variant="danger" onClick={this.google_logout} style={{ width: "100%" }}>
+                                ออกจากระบบ
+                            </Button>
+                        </div>
+                    </Card.Header>
+                    
+                    <Card.Body style={{ width: "100%", paddingTop: "20px" }}>
+                        {this.state.scene === "addSubject" ? (
+                            <AddSubject user={this.state.user} app={this} />
+                        ) : this.state.scene === "editProfile" ? (
+                            <EditProfile user={this.state.user} app={this} />
+                        ) : this.state.scene === "manageCourse" ? (
+                            <ManagaCourse course={this.state.currentCourse} app={this} />
+                        ) : (
+                            <AllCourses data={this.state.courses} app={this} />
+                        )}
+                    </Card.Body>
+                </div>
             </Card>
         );
     }
+    
 }
 
 const root = ReactDOM.createRoot(document.getElementById("webapp"));
