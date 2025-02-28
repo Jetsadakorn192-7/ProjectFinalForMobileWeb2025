@@ -84,12 +84,10 @@ function LandingPage({ onLogin }) {
     );
 }
 
-
-
 function EditProfile({ user, app }) {
-    // ตรวจสอบว่ามี user หรือไม่
+    // Check if user exists
     if (!user) {
-        return <p>กำลังโหลดข้อมูล...</p>;
+        return <p>Loading data...</p>;
     }
 
     const [name, setName] = React.useState(user.displayName || "");
@@ -97,41 +95,41 @@ function EditProfile({ user, app }) {
 
     const handleSave = async () => {
         if (!name.trim()) {
-            alert("กรุณากรอกชื่อ");
+            alert("Please enter your name");
             return;
         }
 
         try {
             const userRef = db.collection("users").doc(user.uid);
 
-            // อัปเดตข้อมูลใน Firestore
+            // Update data in Firestore
             await userRef.set({ name, photoURL }, { merge: true });
 
-            // อัปเดตข้อมูลใน Firebase Authentication
+            // Update data in Firebase Authentication
             await firebase.auth().currentUser.updateProfile({ displayName: name, photoURL: photoURL || "" });
 
-            // ดึงข้อมูลใหม่จาก Firestore
+            // Fetch new data from Firestore
             const updatedDoc = await userRef.get();
             const updatedUserData = updatedDoc.data();
 
-            // อัปเดต state ของ App
+            // Update App state
             app.setState({ user: { ...app.state.user, displayName: updatedUserData.name, photoURL: updatedUserData.photoURL }, scene: "dashboard" });
 
-            alert("อัปเดตโปรไฟล์สำเร็จ!");
+            alert("Profile updated successfully!");
 
         } catch (error) {
-            console.error("เกิดข้อผิดพลาด:", error);
-            alert("เกิดข้อผิดพลาดในการอัปเดตโปรไฟล์");
+            console.error("Error:", error);
+            alert("Error updating profile");
         }
     };
 
     return (
         <Card className="mt-3">
-            <Card.Header><h4>แก้ไขโปรไฟล์</h4></Card.Header>
+            <Card.Header><h4>Edit Profile</h4></Card.Header>
             <Card.Body>
                 <Form>
                     <Form.Group className="mb-3">
-                        <Form.Label>ชื่อ</Form.Label>
+                        <Form.Label>Name</Form.Label>
                         <Form.Control type="text" value={name} onChange={(e) => setName(e.target.value)} />
                     </Form.Group>
 
@@ -141,12 +139,12 @@ function EditProfile({ user, app }) {
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                        <Form.Label>URL รูปภาพ</Form.Label>
+                        <Form.Label>Photo URL</Form.Label>
                         <Form.Control type="text" value={photoURL} onChange={(e) => setPhotoURL(e.target.value)} />
                     </Form.Group>
 
-                    <Button variant="success" onClick={handleSave}>บันทึก</Button>{' '}
-                    <Button variant="secondary" onClick={() => app.setState({ scene: "dashboard" })}>ยกเลิก</Button>
+                    <Button variant="success" onClick={handleSave}>Save</Button>{' '}
+                    <Button variant="secondary" onClick={() => app.setState({ scene: "dashboard" })}>Cancel</Button>
                 </Form>
             </Card.Body>
         </Card>
@@ -166,26 +164,27 @@ function AllCourses({ data, app }) {
                                 <Card.Body>
                                     <Card.Title>{c.info.name}</Card.Title>
                                     <Card.Text>
-                                        <strong>รหัสวิชา:</strong> {c.info.code} <br />
-                                        <strong>ห้องเรียน:</strong> {c.info.room}
+                                        <strong>Course Code:</strong> {c.info.code} <br />
+                                        <strong>Classroom:</strong> {c.info.room}
                                     </Card.Text>
                                 </Card.Body>
                                 <Card.Footer className="text-center">
-                                    <Button variant="warning" onClick={() => app.manageCourse(c)} className="me-2">จัดการ</Button>
-                                    <Button variant="danger" onClick={() => app.delete(c)}>ลบ</Button>
+                                    <Button variant="warning" onClick={() => app.manageCourse(c)} className="me-2">Manage</Button>
+                                    <Button variant="danger" onClick={() => app.delete(c)}>Delete</Button>
                                 </Card.Footer>
                             </Card>
                         </Col>
                     ))
                 ) : (
                     <Col className="text-center">
-                        <p>ไม่มีข้อมูลรายวิชา</p>
+                        <p>No courses available</p>
                     </Col>
                 )}
             </Row>
         </Container>
     );
 }
+
 function AddSubject({ user, app }) {
     const [subjectCode, setSubjectCode] = React.useState("");
     const [subjectName, setSubjectName] = React.useState("");
