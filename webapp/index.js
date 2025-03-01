@@ -262,6 +262,7 @@ async function addClassroom(uid, code, name, room, photoURL) {
     return cid;
 }
 
+// แก้ไข ManagaCourse component เพื่อเพิ่มแท็บคำถาม
 function ManagaCourse({ course, app }) {
     const [tab, setTab] = React.useState("details");
 
@@ -278,6 +279,8 @@ function ManagaCourse({ course, app }) {
                     <a className={`nav-link ${tab === "qrcode" ? "active" : ""}`} onClick={() => setTab("qrcode")}>QR Code</a>
                     <a className={`nav-link ${tab === "students" ? "active" : ""}`} onClick={() => setTab("students")}>นักเรียน</a>
                     <a className={`nav-link ${tab === "attendance" ? "active" : ""}`} onClick={() => setTab("attendance")}>เช็คชื่อ</a>
+                    <a className={`nav-link ${tab === "questions" ? "active" : ""}`} onClick={() => setTab("questions")}>คำถาม</a>
+                    
                 </nav>
 
                 <div className="mt-3">
@@ -285,12 +288,12 @@ function ManagaCourse({ course, app }) {
                     {tab === "qrcode" && <CourseQRCode cid={course.id} />}
                     {tab === "students" && <StudentList cid={course.id} />}
                     {tab === "attendance" && <Attendance cid={course.id} />}
+                    {tab === "questions" && <ClassQuestions cid={course.id} user={app.state.user} />}
                 </div>
             </Card.Body>
         </Card>
     );
 }
-
 function CourseDetails({ course }) {
     return (
         <Container className="mt-4">
@@ -413,6 +416,244 @@ function Attendance({ cid }) {
     );
 }
 
+// อัพเดทฟังก์ชัน ClassQuestions ให้มีการตรวจสอบและแสดงผลข้อมูลที่ดีขึ้น
+function ClassQuestions({ cid, user }) {
+    const [questions, setQuestions] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
+
+    React.useEffect(() => {
+        console.log("Fetching questions for course ID:", cid);
+        setLoading(true);
+        setError(null);
+        
+        // ตรวจสอบว่ามี cid หรือไม่
+        if (!cid) {
+            console.error("No course ID provided");
+            setError("ไม่มีรหัสวิชา กรุณาลองใหม่อีกครั้ง");
+            setLoading(false);
+            return;
+        }
+
+        try {
+            // สร้างการติดตาม (subscription) ไปยังคอลเลกชัน questions
+            const unsubscribe = db.collection("questions")
+                .where("courseId", "==", cid)
+                .orderBy("timestamp", "desc")
+                .onSnapshot(
+                    (snapshot) => {
+                        console.log("Questions snapshot received, count:", snapshot.docs.length);
+                        
+                        const questionsData = snapshot.docs.map(doc => {
+                            const data = doc.data();
+                            console.log("Question data:", data);
+                            
+                            // ตรวจสอบและแปลง timestamp
+                            let formattedTimestamp;
+                            try {
+                                formattedTimestamp = data.timestamp ? data.timestamp.toDate() : new Date();
+                            } catch (e) {
+                                console.error("Error converting timestamp:", e);
+                                formattedTimestamp = new Date();
+                            }
+                            
+                            return {
+                                id: doc.id,
+                                ...data,
+                                timestamp: formattedTimestamp
+                            };
+                        });
+                        
+                        setQuestions(questionsData);
+                        setLoading(false);
+                    },
+                    (error) => {
+                        console.error("Error fetching questions:", error);
+                        setError(`เกิดข้อผิดพลาดในการดึงข้อมูล: ${error.message}`);
+                        setLoading(false);
+                    }
+                );
+
+            // ยกเลิกการติดตามเมื่อ Component ถูกลบ
+            return () => {
+                console.log("Unsubscribing from questions snapshot");
+                unsubscribe();
+            };
+        } catch (error) {
+            console.error("Exception in setting up snapshot:", error);
+            setError(`เกิดข้อผิดพลาดในการตั้งค่าการดึงข้อมูล: ${error.message}`);
+            setLoading(false);
+        }
+    }, [cid]);
+
+    const askNewQuestion = () => {
+        const questionText = prompt("กรุณากรอกคำถามที่ต้องการส่งถึงอาจารย์:");
+        if (!questionText || questionText.trim() === "") return;
+        
+        console.log("Adding new question to course:", cid);
+        
+        // ข้อมูลคำถามที่จะบันทึก
+        const questionData = {
+            text: questionText.trim(),
+            courseId: cid,
+            userId: user.uid,
+            userName: user.displayName || "ไม่ระบุชื่อ",
+            userPhoto: user.photoURL || "",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            status: "pending"
+        };
+        
+        console.log("Question data to save:", questionData);
+        
+        db.collection("questions").add(questionData)
+        .then((docRef) => {
+            console.log("Question added successfully with ID:", docRef.id);
+            alert("ส่งคำถามเรียบร้อยแล้ว");
+        })
+        .catch(error => {
+            console.error("Error adding question:", error);
+            alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
+        });
+    };
+
+    // ฟังก์ชันสำหรับตรวจสอบโครงสร้างฐานข้อมูล
+    const debugDatabase = () => {
+        console.log("Debugging database for course ID:", cid);
+        
+        // ตรวจสอบว่าคอลเลกชัน questions มีอยู่หรือไม่
+        db.collection("questions").get()
+            .then(snapshot => {
+                console.log("Total questions in database:", snapshot.docs.length);
+                
+                // ดึงข้อมูลทั้งหมดโดยไม่มีเงื่อนไข where
+                snapshot.docs.forEach(doc => {
+                    console.log("Question ID:", doc.id, "Data:", doc.data());
+                });
+                
+                alert(`จำนวนคำถามทั้งหมดในฐานข้อมูล: ${snapshot.docs.length}`);
+            })
+            .catch(error => {
+                console.error("Error checking questions collection:", error);
+                alert(`เกิดข้อผิดพลาดในการตรวจสอบฐานข้อมูล: ${error.message}`);
+            });
+    };
+
+    return (
+        <div>
+            <div className="d-flex justify-content-between align-items-center mb-3">
+                <h4>คำถามในห้องเรียน</h4>
+                <div>
+                    <Button variant="primary" onClick={askNewQuestion} className="me-2">ถามคำถามใหม่</Button>
+                    <Button variant="secondary" onClick={debugDatabase}>ตรวจสอบฐานข้อมูล</Button>
+                </div>
+            </div>
+            
+            {loading ? (
+                <div className="text-center p-4">
+                    <p>กำลังโหลดข้อมูล...</p>
+                </div>
+            ) : error ? (
+                <Alert variant="danger">
+                    <p>{error}</p>
+                    <Button variant="outline-danger" onClick={() => window.location.reload()}>โหลดหน้าใหม่</Button>
+                </Alert>
+            ) : questions.length > 0 ? (
+                <div>
+                    <p>พบคำถามทั้งหมด {questions.length} รายการ</p>
+                    
+                    {questions.map((question) => (
+                        <Card key={question.id} className="mb-3">
+                            <Card.Header>
+                                <div className="d-flex align-items-center">
+                                    {question.userPhoto ? (
+                                        <img 
+                                            src={question.userPhoto} 
+                                            alt="User" 
+                                            width="30" 
+                                            height="30" 
+                                            className="rounded-circle me-2" 
+                                        />
+                                    ) : (
+                                        <div className="bg-secondary rounded-circle me-2" style={{ width: 30, height: 30 }}></div>
+                                    )}
+                                    <span className="me-2">{question.userName || "ไม่ระบุชื่อ"}</span>
+                                    <small className="text-muted ms-auto">
+                                        {question.timestamp.toLocaleString('th-TH')}
+                                    </small>
+                                </div>
+                            </Card.Header>
+                            <Card.Body>
+                                <Card.Text>{question.text}</Card.Text>
+                                
+                                {question.status === "answered" && question.answer && (
+                                    <div className="mt-3 p-3 bg-light rounded">
+                                        <p className="fw-bold">คำตอบ:</p>
+                                        <p>{question.answer}</p>
+                                        {question.answeredByName && (
+                                            <p className="text-muted small mb-0">
+                                                ตอบโดย: {question.answeredByName}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </Card.Body>
+                            <Card.Footer className="d-flex justify-content-end">
+                                {user && user.uid && (
+                                    <>
+                                        <Button 
+                                            variant="outline-primary" 
+                                            size="sm"
+                                            onClick={() => {
+                                                const answer = prompt("กรุณากรอกคำตอบ:");
+                                                if (answer && answer.trim()) {
+                                                    db.collection("questions").doc(question.id).update({
+                                                        answer: answer.trim(),
+                                                        answeredBy: user.uid,
+                                                        answeredByName: user.displayName || "อาจารย์",
+                                                        answeredAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                                        status: "answered"
+                                                    }).then(() => {
+                                                        alert("บันทึกคำตอบเรียบร้อย");
+                                                    }).catch(err => {
+                                                        console.error("Error saving answer:", err);
+                                                        alert("เกิดข้อผิดพลาดในการบันทึกคำตอบ");
+                                                    });
+                                                }
+                                            }}
+                                            className="me-2"
+                                        >
+                                            {question.status === "answered" ? "แก้ไขคำตอบ" : "ตอบคำถาม"}
+                                        </Button>
+                                        <Button 
+                                            variant="outline-danger" 
+                                            size="sm"
+                                            onClick={() => {
+                                                if (window.confirm("ต้องการลบคำถามนี้ใช่หรือไม่?")) {
+                                                    db.collection("questions").doc(question.id).delete()
+                                                        .then(() => alert("ลบคำถามเรียบร้อย"))
+                                                        .catch(err => {
+                                                            console.error("Error deleting question:", err);
+                                                            alert("เกิดข้อผิดพลาดในการลบคำถาม");
+                                                        });
+                                                }
+                                            }}
+                                        >
+                                            ลบคำถาม
+                                        </Button>
+                                    </>
+                                )}
+                            </Card.Footer>
+                        </Card>
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center p-5 bg-light rounded">
+                    <p className="mb-0">ไม่มีคำถามในวิชานี้ กดปุ่ม "ถามคำถามใหม่" เพื่อเริ่มต้น</p>
+                </div>
+            )}
+        </div>
+    );
+}
 
 class App extends React.Component {
     state = {
@@ -421,31 +662,129 @@ class App extends React.Component {
         user: null,
         currentCourse: null,
     };
-    askQuestion = async () => {
-        const question = prompt("กรุณากรอกคำถามที่ต้องการเพิ่ม:");
-        if (question) {
-            try {
-                await db.collection("questions").add({
-                    text: question,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                });
-                alert("บันทึกคำถามสำเร็จ");
-            } catch (error) {
-                console.error("Error adding document: ", error);
-            }
-        }
-    }
+   // ฟังก์ชันที่ปรับปรุงสำหรับการถามคำถามจากหน้าหลัก
+askQuestion = () => {
+    console.log("askQuestion called, current scene:", this.state.scene);
     
+    // ถ้าไม่ได้อยู่ในหน้าจัดการวิชาหรือไม่มีวิชาที่เลือก
+    if (this.state.scene !== "manageCourse" || !this.state.currentCourse) {
+        const courses = this.state.courses;
+        console.log("Available courses:", courses);
+        
+        if (courses.length === 0) {
+            alert("คุณยังไม่มีวิชา กรุณาเพิ่มวิชาก่อนถามคำถาม");
+            return;
+        }
+        
+        // สร้างตัวเลือกวิชา
+        let courseOptions = "เลือกวิชาที่ต้องการถามคำถาม:\n";
+        courses.forEach((course, index) => {
+            courseOptions += `${index + 1}. ${course.info.name} (${course.info.code})\n`;
+        });
+        
+        // ให้ผู้ใช้เลือกวิชา
+        const selectedIndex = prompt(courseOptions);
+        if (!selectedIndex || isNaN(selectedIndex) || selectedIndex < 1 || selectedIndex > courses.length) {
+            alert("กรุณาเลือกวิชาให้ถูกต้อง");
+            return;
+        }
+        
+        // เก็บวิชาที่เลือก
+        const selectedCourse = courses[parseInt(selectedIndex) - 1];
+        console.log("Selected course:", selectedCourse);
+        
+        // ถามคำถาม
+        const questionText = prompt(`กรุณากรอกคำถามสำหรับวิชา "${selectedCourse.info.name}":`);
+        if (!questionText || questionText.trim() === "") return;
+        
+        console.log("Adding question to course:", selectedCourse.id);
+        
+        // ข้อมูลคำถาม
+        const questionData = {
+            text: questionText.trim(),
+            courseId: selectedCourse.id,
+            userId: this.state.user.uid,
+            userName: this.state.user.displayName || "ไม่ระบุชื่อ",
+            userPhoto: this.state.user.photoURL || "",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            status: "pending"
+        };
+        
+        // บันทึกคำถาม
+        db.collection("questions").add(questionData)
+        .then((docRef) => {
+            console.log("Question added with ID:", docRef.id);
+            alert(`ส่งคำถามถึงวิชา "${selectedCourse.info.name}" เรียบร้อยแล้ว`);
+        })
+        .catch(error => {
+            console.error("Error adding question:", error);
+            alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
+        });
+    } else {
+        // กรณีอยู่ในหน้าจัดการวิชาอยู่แล้ว
+        console.log("Already in course management, current course:", this.state.currentCourse.id);
+        
+        const questionText = prompt(`กรุณากรอกคำถามสำหรับวิชา "${this.state.currentCourse.info.name}":`);
+        if (!questionText || questionText.trim() === "") return;
+        
+        // ข้อมูลคำถาม
+        const questionData = {
+            text: questionText.trim(),
+            courseId: this.state.currentCourse.id,
+            userId: this.state.user.uid,
+            userName: this.state.user.displayName || "ไม่ระบุชื่อ",
+            userPhoto: this.state.user.photoURL || "",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            status: "pending"
+        };
+        
+        // บันทึกคำถาม
+        db.collection("questions").add(questionData)
+        .then((docRef) => {
+            console.log("Question added with ID:", docRef.id);
+            alert("ส่งคำถามเรียบร้อยแล้ว");
+        })
+        .catch(error => {
+            console.error("Error adding question:", error);
+            alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
+        });
+    }
+};
+
+// แยกส่วนการถามคำถามออกมาเป็นฟังก์ชันใหม่
+promptForQuestion = () => {
+    const questionText = prompt("กรุณากรอกคำถามที่ต้องการส่งถึงอาจารย์:");
+    if (!questionText || questionText.trim() === "") return;
+    
+    db.collection("questions").add({
+        text: questionText.trim(),
+        courseId: this.state.currentCourse.id,
+        userId: this.state.user.uid,
+        userName: this.state.user.displayName,
+        userPhoto: this.state.user.photoURL,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        status: "pending" // pending, answered, rejected
+    })
+    .then(() => {
+        alert("ส่งคำถามเรียบร้อยแล้ว");
+    })
+    .catch(error => {
+        console.error("เกิดข้อผิดพลาดในการส่งคำถาม:", error);
+        alert("เกิดข้อผิดพลาดในการส่งคำถาม");
+    });
+};
     fetchQuestions = () => {
+        if (!this.state.currentCourse) return;
+
         db.collection("questions")
+            .where("courseId", "==", this.state.currentCourse.id)
             .orderBy("timestamp", "desc")
             .onSnapshot((snapshot) => {
                 const questions = snapshot.docs.map(doc => doc.data().text);
                 this.setState({ questions });
             });
-    }
-    
-    componentDidMount() {
+    };
+componentDidMount() {
         this.fetchQuestions(); // โหลดคำถามเมื่อแอปเริ่มต้น
     }
     constructor() {
@@ -513,17 +852,13 @@ class App extends React.Component {
         }
     };
     manageCourse = (course) => {
-        this.setState({ currentCourse: course, scene: "manageCourse" });
-    };
-
-    // ฟังก์ชันใหม่สำหรับถามคำถาม
-    askQuestion = () => {
-        const question = prompt("กรุณากรอกคำถามที่ต้องการเพิ่ม:");
-        if (question) {
-            alert(`คำถามที่ตั้งไว้: ${question}`);
-            // ที่นี่คุณสามารถเพิ่มโค้ดเพื่อบันทึกคำถามลงใน State หรือ Database ได้
-        }
+        this.setState({
+            scene: "manageCourse",
+            currentCourse: course
+        });
     }
+
+    
 
     render() {
         if (!this.state.user) return <LandingPage onLogin={this.google_login} />;
@@ -567,10 +902,10 @@ class App extends React.Component {
                             <Button variant="danger" onClick={this.google_logout} style={{ width: "100%" }}>
                                 ออกจากระบบ
                             </Button>
-                            {/* เพิ่มปุ่มใหม่เพื่อเรียกฟังก์ชันถามคำถาม */}
+                            {/* เพิ่มปุ่มใหม่เพื่อเรียกฟังก์ชันถามคำถาม
                             <Button variant="info" onClick={this.askQuestion} style={{ width: "100%" }}>
                                 ถามคำถาม
-                            </Button>
+                            </Button> */}
                         </div>
                     </Card.Header>
 
