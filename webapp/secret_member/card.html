@@ -1,0 +1,27 @@
+<!-- card.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Game - SC888</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-white text-center">
+    <h1 class="my-4">🃏 Card Game</h1>
+    <div class="container">
+        <button id="draw-btn" class="btn btn-primary">Draw a Card</button>
+        <div id="card-result" class="mt-4"></div>
+    </div>
+    <script>
+        const cardSuits = ["♠", "♥", "♦", "♣"];
+        const cardValues = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
+
+        document.getElementById("draw-btn").addEventListener("click", function() {
+            let suit = cardSuits[Math.floor(Math.random() * cardSuits.length)];
+            let value = cardValues[Math.floor(Math.random() * cardValues.length)];
+            document.getElementById("card-result").textContent = `You drew the ${value}${suit}`;
+        });
+    </script>
+</body>
+</html>

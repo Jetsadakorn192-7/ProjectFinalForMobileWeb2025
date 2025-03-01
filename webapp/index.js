@@ -14,7 +14,32 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-
+const handleCheckIn = async (studentId) => {
+    try {
+      // เช็คชื่อใน Firestore
+      const user = auth.currentUser;
+      const date = new Date().toISOString().split('T')[0]; // ใช้วันที่ปัจจุบัน
+  
+      await addDoc(collection(db, 'attendance'), {
+        classId: classId,
+        studentId: studentId,
+        date: date,
+        status: 'checked-in',
+        timestamp: new Date(),
+      });
+  
+      // อัพเดตสถานะการเช็คชื่อในหน้าจอ
+      setCheckedIn((prevState) => ({
+        ...prevState,
+        [studentId]: 'checked-in',
+      }));
+  
+      console.log('Checked in successfully!');
+    } catch (error) {
+      console.error('Error checking in:', error);
+    }
+  };
+  
 function LandingPage({ onLogin }) {
     return (
         <div style={{
@@ -84,10 +109,12 @@ function LandingPage({ onLogin }) {
     );
 }
 
+
+
 function EditProfile({ user, app }) {
-    // Check if user exists
+    // ตรวจสอบว่ามี user หรือไม่
     if (!user) {
-        return <p>Loading data...</p>;
+        return <p>กำลังโหลดข้อมูล...</p>;
     }
 
     const [name, setName] = React.useState(user.displayName || "");
@@ -95,41 +122,41 @@ function EditProfile({ user, app }) {
 
     const handleSave = async () => {
         if (!name.trim()) {
-            alert("Please enter your name");
+            alert("กรุณากรอกชื่อ");
             return;
         }
 
         try {
             const userRef = db.collection("users").doc(user.uid);
 
-            // Update data in Firestore
+            // อัปเดตข้อมูลใน Firestore
             await userRef.set({ name, photoURL }, { merge: true });
 
-            // Update data in Firebase Authentication
+            // อัปเดตข้อมูลใน Firebase Authentication
             await firebase.auth().currentUser.updateProfile({ displayName: name, photoURL: photoURL || "" });
 
-            // Fetch new data from Firestore
+            // ดึงข้อมูลใหม่จาก Firestore
             const updatedDoc = await userRef.get();
             const updatedUserData = updatedDoc.data();
 
-            // Update App state
+            // อัปเดต state ของ App
             app.setState({ user: { ...app.state.user, displayName: updatedUserData.name, photoURL: updatedUserData.photoURL }, scene: "dashboard" });
 
-            alert("Profile updated successfully!");
+            alert("อัปเดตโปรไฟล์สำเร็จ!");
 
         } catch (error) {
-            console.error("Error:", error);
-            alert("Error updating profile");
+            console.error("เกิดข้อผิดพลาด:", error);
+            alert("เกิดข้อผิดพลาดในการอัปเดตโปรไฟล์");
         }
     };
 
     return (
         <Card className="mt-3">
-            <Card.Header><h4>Edit Profile</h4></Card.Header>
+            <Card.Header><h4>แก้ไขโปรไฟล์</h4></Card.Header>
             <Card.Body>
                 <Form>
                     <Form.Group className="mb-3">
-                        <Form.Label>Name</Form.Label>
+                        <Form.Label>ชื่อ</Form.Label>
                         <Form.Control type="text" value={name} onChange={(e) => setName(e.target.value)} />
                     </Form.Group>
 
@@ -139,12 +166,12 @@ function EditProfile({ user, app }) {
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                        <Form.Label>Photo URL</Form.Label>
+                        <Form.Label>URL รูปภาพ</Form.Label>
                         <Form.Control type="text" value={photoURL} onChange={(e) => setPhotoURL(e.target.value)} />
                     </Form.Group>
 
-                    <Button variant="success" onClick={handleSave}>Save</Button>{' '}
-                    <Button variant="secondary" onClick={() => app.setState({ scene: "dashboard" })}>Cancel</Button>
+                    <Button variant="success" onClick={handleSave}>บันทึก</Button>{' '}
+                    <Button variant="secondary" onClick={() => app.setState({ scene: "dashboard" })}>ยกเลิก</Button>
                 </Form>
             </Card.Body>
         </Card>
@@ -164,27 +191,26 @@ function AllCourses({ data, app }) {
                                 <Card.Body>
                                     <Card.Title>{c.info.name}</Card.Title>
                                     <Card.Text>
-                                        <strong>Course Code:</strong> {c.info.code} <br />
-                                        <strong>Classroom:</strong> {c.info.room}
+                                        <strong>รหัสวิชา:</strong> {c.info.code} <br />
+                                        <strong>ห้องเรียน:</strong> {c.info.room}
                                     </Card.Text>
                                 </Card.Body>
                                 <Card.Footer className="text-center">
-                                    <Button variant="warning" onClick={() => app.manageCourse(c)} className="me-2">Manage</Button>
-                                    <Button variant="danger" onClick={() => app.delete(c)}>Delete</Button>
+                                    <Button variant="warning" onClick={() => app.manageCourse(c)} className="me-2">จัดการ</Button>
+                                    <Button variant="danger" onClick={() => app.delete(c)}>ลบ</Button>
                                 </Card.Footer>
                             </Card>
                         </Col>
                     ))
                 ) : (
                     <Col className="text-center">
-                        <p>No courses available</p>
+                        <p>ไม่มีข้อมูลรายวิชา</p>
                     </Col>
                 )}
             </Row>
         </Container>
     );
 }
-
 function AddSubject({ user, app }) {
     const [subjectCode, setSubjectCode] = React.useState("");
     const [subjectName, setSubjectName] = React.useState("");
@@ -264,6 +290,7 @@ function ManagaCourse({ course, app }) {
         </Card>
     );
 }
+
 function CourseDetails({ course }) {
     return (
         <Container className="mt-4">
@@ -327,10 +354,36 @@ function StudentList({ cid }) {
         </Table>
     );
 }
+
 function Attendance({ cid }) {
+    const [attendances, setAttendances] = React.useState([]);
+
+    React.useEffect(() => {
+        const unsubscribe = db.collection(`classroom/${cid}/attendance`)
+            .orderBy('date', 'desc')
+            .onSnapshot((querySnapshot) => {
+                const attendanceData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }));
+                setAttendances(attendanceData);
+            });
+
+        return () => unsubscribe();
+    }, [cid]);
+
+    const handleAddAttendance = async () => {
+        const newAttendanceRef = db.collection(`classroom/${cid}/attendance`).doc();
+        await newAttendanceRef.set({
+            date: firebase.firestore.Timestamp.now(),
+            attendees: [],
+        });
+        alert("เพิ่มการเช็คชื่อสำเร็จ");
+    };
+
     return (
         <div>
-            <Button variant="success">เพิ่มการเช็คชื่อ</Button>
+            <Button variant="success" onClick={handleAddAttendance}>เพิ่มการเช็คชื่อ</Button>
             <h5>ประวัติการเช็คชื่อ</h5>
             <Table striped bordered hover>
                 <thead>
@@ -342,6 +395,19 @@ function Attendance({ cid }) {
                         <th>จัดการ</th>
                     </tr>
                 </thead>
+                <tbody>
+                    {attendances.map((att, index) => (
+                        <tr key={att.id}>
+                            <td>{index + 1}</td>
+                            <td>{att.date.toDate().toLocaleString()}</td>
+                            <td>{att.attendees.length}</td>
+                            <td>{att.status}</td>
+                            <td>
+                                {/* คุณสามารถเพิ่มปุ่มการจัดการอื่น ๆ ได้ เช่น แก้ไขหรือลบ */}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
             </Table>
         </div>
     );
@@ -355,7 +421,33 @@ class App extends React.Component {
         user: null,
         currentCourse: null,
     };
-
+    askQuestion = async () => {
+        const question = prompt("กรุณากรอกคำถามที่ต้องการเพิ่ม:");
+        if (question) {
+            try {
+                await db.collection("questions").add({
+                    text: question,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                });
+                alert("บันทึกคำถามสำเร็จ");
+            } catch (error) {
+                console.error("Error adding document: ", error);
+            }
+        }
+    }
+    
+    fetchQuestions = () => {
+        db.collection("questions")
+            .orderBy("timestamp", "desc")
+            .onSnapshot((snapshot) => {
+                const questions = snapshot.docs.map(doc => doc.data().text);
+                this.setState({ questions });
+            });
+    }
+    
+    componentDidMount() {
+        this.fetchQuestions(); // โหลดคำถามเมื่อแอปเริ่มต้น
+    }
     constructor() {
         super();
         firebase.auth().onAuthStateChanged(async (user) => {
@@ -423,6 +515,16 @@ class App extends React.Component {
     manageCourse = (course) => {
         this.setState({ currentCourse: course, scene: "manageCourse" });
     };
+
+    // ฟังก์ชันใหม่สำหรับถามคำถาม
+    askQuestion = () => {
+        const question = prompt("กรุณากรอกคำถามที่ต้องการเพิ่ม:");
+        if (question) {
+            alert(`คำถามที่ตั้งไว้: ${question}`);
+            // ที่นี่คุณสามารถเพิ่มโค้ดเพื่อบันทึกคำถามลงใน State หรือ Database ได้
+        }
+    }
+
     render() {
         if (!this.state.user) return <LandingPage onLogin={this.google_login} />;
         return (
@@ -438,7 +540,6 @@ class App extends React.Component {
                     backgroundPosition: "center",
                     backgroundAttachment: "fixed",
                     padding: "20px"
-                    
                 }}>
                     <Card.Header style={{
                         display: "flex",
@@ -453,10 +554,10 @@ class App extends React.Component {
                         textAlign: "center"
                     }}>
                         <img src={this.state.user.photoURL} alt="Profile" width="150" className="rounded-circle" style={{ marginBottom: "15px" }} />
-                        <h4 style={{ marginBottom: "10px", fontSize: "30px"}}>{this.state.user.displayName}</h4>
-                        <p style={{ color: "#777", marginBottom: "20px" , fontSize: "18px"}}>({this.state.user.email})</p>
-    
-                        <div style={{ display: "flex", flexDirection: "row", gap: "10px", width: "25%" ,height: "55px"}}>
+                        <h4 style={{ marginBottom: "10px", fontSize: "30px" }}>{this.state.user.displayName}</h4>
+                        <p style={{ color: "#777", marginBottom: "20px", fontSize: "18px" }}>({this.state.user.email})</p>
+
+                        <div style={{ display: "flex", flexDirection: "row", gap: "10px", width: "25%", height: "55px" }}>
                             <Button variant="primary" onClick={() => this.setState({ scene: "addSubject" })} style={{ width: "100%" }}>
                                 เพิ่มวิชา
                             </Button>
@@ -466,9 +567,13 @@ class App extends React.Component {
                             <Button variant="danger" onClick={this.google_logout} style={{ width: "100%" }}>
                                 ออกจากระบบ
                             </Button>
+                            {/* เพิ่มปุ่มใหม่เพื่อเรียกฟังก์ชันถามคำถาม */}
+                            <Button variant="info" onClick={this.askQuestion} style={{ width: "100%" }}>
+                                ถามคำถาม
+                            </Button>
                         </div>
                     </Card.Header>
-                    
+
                     <Card.Body style={{ width: "100%", paddingTop: "20px" }}>
                         {this.state.scene === "addSubject" ? (
                             <AddSubject user={this.state.user} app={this} />
@@ -484,7 +589,6 @@ class App extends React.Component {
             </Card>
         );
     }
-    
 }
 
 const root = ReactDOM.createRoot(document.getElementById("webapp"));

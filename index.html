@@ -13,7 +13,7 @@
             color: #333;
             line-height: 1.6;
         }
-        
+
         .header {
             background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
             color: white;
@@ -23,34 +23,27 @@
             border-radius: 0 0 15px 15px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
-        
-        .header h1 {
-            font-weight: 500;
-            font-size: 2rem;
-            letter-spacing: -0.5px;
-        }
-        
+
         .assignment-container {
             max-width: 1140px;
             margin: 0 auto;
             padding: 1.5rem;
         }
-        
+
         .card {
             background-color: white;
             border-radius: 8px;
             padding: 2rem;
-            transition: transform 0.3s, box-shadow 0.3s;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
             text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+            transition: transform 0.3s, box-shadow 0.3s;
         }
-        
+
         .card:hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 15px rgba(0, 0, 0, 0.06);
         }
-        
+
         .btn-primary {
             background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
             border: none;
@@ -59,12 +52,12 @@
             font-weight: 400;
             transition: all 0.3s;
         }
-        
+
         .btn-primary:hover {
             transform: scale(1.05);
             box-shadow: 0 4px 12px rgba(37, 117, 252, 0.3);
         }
-        
+
         .footer {
             text-align: center;
             padding: 1.5rem 0;
@@ -73,24 +66,46 @@
             font-size: 0.9rem;
             border-top: 1px solid #f1f1f1;
         }
-        
-        h2 {
-            font-weight: 400;
-            letter-spacing: -0.3px;
+
+        /* 🔥 สไตล์ของ Popup แจ้งเตือน */
+        .popup-container {
+            position: fixed;
+            bottom: 500px;
+            right: -300px; /* ซ่อน popup ตอนแรก */
+            width: 250px;
+            background-color: white;
+            border-left: 5px solid #2575fc;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            transition: right 0.5s ease-in-out;
         }
-        
-        p {
-            font-weight: 300;
+
+        .popup-container.show {
+            right: 20px; /* แสดง popup */
+        }
+
+        .popup-close {
+            cursor: pointer;
+            float: right;
+            font-size: 20px;
+            font-weight: bold;
+            color: #666;
+        }
+
+        .popup-close:hover {
+            color: red;
         }
     </style>
 </head>
 <body>
+
     <header class="header">
         <div class="container">
             <h1>SC310006 Mobile and Web Application Development</h1>
         </div>
     </header>
-      
+
     <main class="assignment-container">
         <div class="container">
             <div class="row justify-content-center">
@@ -110,5 +125,38 @@
             <p>&copy; 2023 SC310006 - Mobile and Web Application Development</p>
         </div>
     </footer>
+
+    <!-- 🔥 Popup ด้านข้าง -->
+    <div id="popup" class="popup-container">
+        <span class="popup-close" onclick="closePopup()">&times;</span>
+        <h5>📢 แจ้งเตือน</h5>
+        <p>โปรโมชั่นพิเศษ! รับโบนัส 300% แจกจริงเมื่อสมัครวันนี้ที่ 
+            <a href="webapp\secret_member\index.html" target="_blank" style="text-decoration: none;">
+                <button style="border: none; background-color: #2575fc; color: white; padding: 10px 20px; border-radius: 6px; font-size: 16px; cursor: pointer;">
+                    <h2 style="margin: 0;">SC888</h2>
+                </button>
+            </a>
+        </p>
+        
+    </div>
+
+    <script>
+        function showPopup() {
+            document.getElementById("popup").classList.add("show");
+
+            // หายไปเองใน 5 วินาที
+            setTimeout(() => {
+                closePopup();
+            }, 15000);
+        }
+
+        function closePopup() {
+            document.getElementById("popup").classList.remove("show");
+        }
+
+        // แสดง popup อัตโนมัติหลัง 3 วินาที
+        setTimeout(showPopup, 1000);
+    </script>
+
 </body>
 </html>
