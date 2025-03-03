@@ -65,28 +65,63 @@ const HomeScreen = ({ navigation }) => {
   const handleBarCodeScanned = async ({ data }) => {
     setScanned(true);
     setIsScanning(false);
+
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert("❌ Error", "Please log in first.");
+            return;
+        }
 
-      const classDocRef = doc(db, "Classes", data);
-      const classDocSnap = await getDoc(classDocRef);
+        let subjectId;
+        try {
+            const urlParams = new URL(data).searchParams;
+            subjectId = urlParams.get("subjectId");
+        } catch (error) {
+            console.error("Invalid QR Code format:", error);
+            Alert.alert("❌ Error", "Invalid QR Code format.");
+            return;
+        }
 
-      if (!classDocSnap.exists()) {
-        Alert.alert("Class Not Found", "The QR code doesn't match any available classes");
-        return;
-      }
+        if (!subjectId) {
+            Alert.alert("❌ Error", "QR Code does not contain subject information.");
+            return;
+        }
 
-      await updateDoc(doc(db, "Student", uid), {
-        enrolledClasses: arrayUnion(data),
-      });
+        // Fetch student data
+        const studentRef = doc(db, "Student", user.uid);
+        const studentDoc = await getDoc(studentRef);
 
-      Alert.alert(
-        "Enrollment Successful", 
-        `You have successfully enrolled in ${classDocSnap.data().name}`
-      );
+        if (!studentDoc.exists()) {
+            Alert.alert("❌ Error", "Student not found in the system.");
+            return;
+        }
+
+        const studentData = studentDoc.data();
+
+        // Register student in the classroom
+        const classStudentRef = doc(db, "classroom", subjectId, "Student", user.uid);
+        await setDoc(classStudentRef, {
+            studentId: studentData.studentId || "-",
+            username: studentData.username || "Unnamed",
+            email: studentData.email || "-",
+            phoneNumber: studentData.phoneNumber || "-",
+            joinedAt: new Date()
+        });
+
+        // Save subject under Student profile
+        const studentSubjectRef = doc(db, "Student", user.uid, "subjectList", subjectId);
+        await setDoc(studentSubjectRef, {
+            code: subjectId,
+            joinedAt: new Date()
+        });
+
+        setJoinedClass(subjectId);
+        Alert.alert("✅ Enrollment Successful", `You have successfully enrolled in ${subjectId}`);
+
     } catch (error) {
-      Alert.alert("Enrollment Failed", error.message);
+        console.error("Error registering student:", error);
+        Alert.alert("❌ Error", "An error occurred during enrollment.");
     }
   };
 
