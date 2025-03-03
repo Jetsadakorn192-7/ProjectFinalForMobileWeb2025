@@ -62,207 +62,191 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  const handleBarCodeScanned = async ({ data }) => {
+   // ✅ ฟังก์ชันสแกน QR Code
+   const handleBarCodeScanned = async ({ data }) => {
     setScanned(true);
     setIsScanning(false);
+
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert("❌ ข้อผิดพลาด", "กรุณาเข้าสู่ระบบก่อน");
+            return;
+        }
 
-      const classDocRef = doc(db, "Classes", data);
-      const classDocSnap = await getDoc(classDocRef);
+        // ดึงค่า subjectId จาก URL ของ QR Code
+        const urlParams = new URL(data).searchParams;
+        const subjectId = urlParams.get("subjectId");
 
-      if (!classDocSnap.exists()) {
-        Alert.alert("Class Not Found", "The QR code doesn't match any available classes");
-        return;
-      }
+        if (!subjectId) {
+            Alert.alert("❌ ข้อผิดพลาด", "QR Code ไม่มีข้อมูลวิชา");
+            return;
+        }
 
-      await updateDoc(doc(db, "Student", uid), {
-        enrolledClasses: arrayUnion(data),
-      });
+        // ดึงข้อมูลของนักเรียนจาก Firestore
+        const studentRef = doc(db, "Student", user.uid);
+        const studentDoc = await getDoc(studentRef);
 
-      Alert.alert(
-        "Enrollment Successful", 
-        `You have successfully enrolled in ${classDocSnap.data().name}`
-      );
+        if (!studentDoc.exists()) {
+            Alert.alert("❌ ข้อผิดพลาด", "ไม่พบนักเรียนในระบบ");
+            return;
+        }
+
+        const studentData = studentDoc.data();
+
+        // เพิ่มนักเรียนเข้าสู่วิชาใน Firestore (classroom/{subjectId}/Student/{studentId})
+        const classStudentRef = doc(db, "classroom", subjectId, "Student", user.uid);
+        await setDoc(classStudentRef, {
+            studentId: studentData.studentId || "-",
+            username: studentData.username || "ไม่ระบุชื่อ",
+            email: studentData.email || "-",
+            phoneNumber: studentData.phoneNumber || "-",
+            joinedAt: new Date()
+        });
+
+        // ✅ บันทึกว่าผู้ใช้เข้าร่วมวิชาในคอลเลกชัน `Student/{studentId}/subjectList/{subjectId}`
+        const studentSubjectRef = doc(db, "Student", user.uid, "subjectList", subjectId);
+        await setDoc(studentSubjectRef, {
+            code: subjectId, 
+            joinedAt: new Date()
+        });
+
+        // ✅ อัปเดต UI แสดงว่านักเรียนเข้าร่วมแล้ว
+        setJoinedClass(subjectId);
+        Alert.alert("✅ ลงทะเบียนสำเร็จ", `คุณได้เข้าร่วมวิชา ${subjectId}`);
+
     } catch (error) {
-      Alert.alert("Enrollment Failed", error.message);
+        console.error("Error registering student:", error);
+        Alert.alert("❌ ข้อผิดพลาด", "เกิดข้อผิดพลาดขณะลงทะเบียน");
     }
   };
 
-  // Start scanning function
+  // ฟังก์ชันเริ่มการสแกน
   const startScanning = async () => {
+    // ตรวจสอบว่ามีสิทธิ์กล้องหรือไม่
     const { granted } = await requestPermission();
     if (granted) {
-      setIsScanning(true);
-      setScanned(false);
+      setIsScanning(true); // เปิดกล้องเพื่อสแกน
+      setScanned(false); // รีเซ็ตสถานะการสแกน
     } else {
-      Alert.alert(
-        "Permission Required", 
-        "Camera access is needed to scan QR codes"
-      );
+      Alert.alert("การอนุญาตกล้องถูกปฏิเสธ", "คุณต้องอนุญาตให้ใช้กล้องเพื่อสแกน QR Code");
     }
   };
   
-  // Stop scanning function
+    // ฟังก์ชันหยุดการสแกน
   const stopScanning = () => {
     setIsScanning(false);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6c63ff" />
-        <Text style={styles.loadingText}>Loading profile data...</Text>
-      </View>
-    );
-  }
-
-  if (!userData) {
-    return (
-      <View style={styles.errorContainer}>
-        <MaterialCommunityIcons name="account-alert" size={80} color="#ff5252" />
-        <Text style={styles.errorText}>Unable to load your profile</Text>
-        <TouchableOpacity 
-          style={styles.retryButton} 
-          onPress={() => fetchUserData(auth.currentUser?.uid)}
-        >
-          <Text style={styles.retryButtonText}>Try Again</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#6c63ff" />
+      <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
       
-      <LinearGradient
-        colors={['#6c63ff', '#8a84fa']}
-        style={styles.header}
-      >
-        <View style={styles.profileSummary}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {userData.username?.charAt(0).toUpperCase() || "?"}
-            </Text>
-          </View>
-          <View>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.usernameText}>{userData.username}</Text>
-          </View>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007bff" />
+          <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
         </View>
-      </LinearGradient>
+      ) : userData ? (
+        <>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>ข้อมูลส่วนตัว</Text>
+          </View>
 
-      <View style={styles.contentContainer}>
-        <View style={styles.infoCard}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="person" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Full Name</Text>
-              <Text style={styles.infoValue}>{userData.username}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="school" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Student ID</Text>
-              <Text style={styles.infoValue}>{userData.studentId}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="mail" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{userData.email}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="call" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Phone</Text>
-              <Text style={styles.infoValue}>{userData.phoneNumber || "Not provided"}</Text>
-            </View>
-          </View>
-        </View>
-
-        <Text style={styles.actionsTitle}>Quick Actions</Text>
-        
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={startScanning}
-          >
-            <View style={[styles.actionIcon, {backgroundColor: '#4caf50'}]}>
-              <Ionicons name="qr-code" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionText}>Scan QR Code</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate("ShowClass")}
-          >
-            <View style={[styles.actionIcon, {backgroundColor: '#2196f3'}]}>
-              <Ionicons name="list" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionText}>My Classes</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={handleLogout}
-          >
-            <View style={[styles.actionIcon, {backgroundColor: '#f44336'}]}>
-              <Ionicons name="log-out" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      {isScanning && permission?.granted && (
-        <View style={styles.scannerContainer}>
-          <StatusBar barStyle="light-content" backgroundColor="#000" />
-          <CameraView
-            style={styles.camera}
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          />
-          
-          {/* Scanner UI Overlay */}
-          <View style={styles.scannerOverlay}>
-            <View style={styles.scannerHeader}>
-              <Text style={styles.scannerTitle}>Scan Class QR Code</Text>
-              <TouchableOpacity onPress={stopScanning} style={styles.closeButton}>
-                <Ionicons name="close-circle" size={32} color="#fff" />
-              </TouchableOpacity>
+          <View style={styles.profileCard}>
+            <View style={styles.profileAvatarContainer}>
+              <Text style={styles.profileAvatar}>{userData.username?.charAt(0) || "?"}</Text>
             </View>
             
-            <View style={styles.scanFrameContainer}>
-              <View style={styles.scanFrame}>
-                <View style={styles.cornerTL} />
-                <View style={styles.cornerTR} />
-                <View style={styles.cornerBL} />
-                <View style={styles.cornerBR} />
-              </View>
-              <Text style={styles.scanInstructions}>
-                Position the QR code within the frame
-              </Text>
+            <View style={styles.profileInfo}>
+              <Text style={styles.username}>{userData.username}</Text>
+              <Text style={styles.info}>รหัสนักศึกษา: {userData.studentId}</Text>
+              <Text style={styles.info}>อีเมล: {userData.email}</Text>
+              <Text style={styles.info}>เบอร์โทร: {userData.phoneNumber || "-"}</Text>
             </View>
-            
+          </View>
+
+          {/* ✅ แสดงข้อความเมื่อนักเรียนเข้าร่วมชั้นเรียนสำเร็จ */}
+          {joinedClass && (
+            <View style={styles.successBox}>
+              <Text style={styles.successText}>✅ เข้าร่วมชั้นเรียน {joinedClass} สำเร็จแล้ว!</Text>
+            </View>
+          )}
+
+          <View style={styles.actionContainer}>
             <TouchableOpacity 
-              style={styles.cancelScanButton}
-              onPress={stopScanning}
+              style={styles.scanButton} 
+              onPress={isScanning ? stopScanning : startScanning}
             >
-              <Text style={styles.cancelScanText}>Cancel</Text>
+              <Ionicons name="qr-code-outline" size={24} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>สแกน QR Code เข้าร่วมชั้นเรียน</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.joinClassButton} 
+              onPress={() => navigation.navigate("JoinClassByCode")}
+            >
+              <Ionicons name="enter-outline" size={24} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>เข้าร่วมชั้นเรียนด้วยรหัส</Text>
+            </TouchableOpacity>
+            
+
+            <TouchableOpacity size={24} style={styles.showClassButton} onPress={() => navigation.navigate("ShowClass")} >
+            <Text style={styles.buttonText}>แสดงรายวิชาที่เรียน</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={24} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>ออกจากระบบ</Text>
             </TouchableOpacity>
           </View>
+          
+          {isScanning && permission?.granted && (
+            <View style={styles.fullScreenScanner}>
+              <StatusBar barStyle="light-content" backgroundColor="black" />
+              <CameraView
+                style={styles.fullScreenCamera}
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+              />
+              
+              {/* Scan Frame */}
+              <View style={styles.scannerOverlay}>
+                <View style={styles.scanFrame}></View>
+                <Text style={styles.scanInstructionText}>วางโค้ด QR ให้อยู่ในกรอบเพื่อสแกน</Text>
+              </View>
+              
+              {/* Header controls */}
+              <SafeAreaView style={styles.scannerControls}>
+                <View style={styles.scannerHeader}>
+                  <Text style={styles.scannerTitle}>สแกน QR Code</Text>
+                  <TouchableOpacity 
+                    style={styles.closeButton} 
+                    onPress={() => setScanning(false)}
+                  >
+                    <Ionicons name="close" size={28} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
+              
+              {/* Bottom controls */}
+              <SafeAreaView style={styles.bottomControls}>
+                <TouchableOpacity 
+                  style={styles.cancelButton} 
+                  onPress={() => setScanning(false)}
+                >
+                  <Text style={styles.cancelButtonText}>ยกเลิก</Text>
+                </TouchableOpacity>
+              </SafeAreaView>
+            </View>
+          )}
+        </>
+      ) : (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={60} color="#d9534f" />
+          <Text style={styles.errorText}>ไม่สามารถโหลดข้อมูลผู้ใช้ได้</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchUserData(auth.currentUser?.uid)}>
+            <Text style={styles.retryButtonText}>ลองใหม่อีกครั้ง</Text>
+          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
