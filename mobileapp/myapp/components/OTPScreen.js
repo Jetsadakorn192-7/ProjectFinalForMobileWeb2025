@@ -1,8 +1,21 @@
 // OTPScreen.js
 import React, { useState, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  Alert, 
+  ActivityIndicator,
+  StyleSheet,
+  SafeAreaView,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView
+} from "react-native";
 import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { 
   auth,
   firebaseConfig,
@@ -10,7 +23,6 @@ import {
   PhoneAuthProvider,
   signInWithCredential,
   db,
-  // ส่วนที่เกี่ยวกับ Firestore
   collection,
   query,
   where,
@@ -22,11 +34,12 @@ const OTPScreen = ({ navigation }) => {
   const [verificationId, setVerificationId] = useState(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
 
-  // สร้าง ref สำหรับ RecaptchaVerifier
+  // Create ref for RecaptchaVerifier
   const recaptchaVerifier = useRef(null);
 
-  // ฟังก์ชันตรวจสอบเบอร์ใน Firestore (ตามที่คุณใช้งาน)
+  // Function to check phone number in Firestore
   const checkPhoneNumberExists = async (phone) => {
     try {
       const usersRef = collection(db, "Student");
@@ -41,13 +54,13 @@ const OTPScreen = ({ navigation }) => {
 
   const formatPhoneNumber = (phone) => {
     if (!phone.startsWith("+")) {
-      Alert.alert("⚠️ รูปแบบเบอร์ไม่ถูกต้อง", "กรุณาใช้ +66XXXXXXXXX");
+      Alert.alert("⚠️ Invalid phone format", "Please use +66XXXXXXXXX format");
       return null;
     }
     return phone;
   };
 
-  // ฟังก์ชันส่ง OTP โดยใช้ recaptchaVerifier
+  // Function to send OTP using recaptchaVerifier
   const sendOTP = async () => {
     const formattedPhone = formatPhoneNumber(phoneNumber);
     if (!formattedPhone) return;
@@ -55,28 +68,29 @@ const OTPScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // (ถ้าต้องการตรวจสอบเบอร์ใน Firestore ก่อน)
+      // Check if phone exists in Firestore
       const phoneExists = await checkPhoneNumberExists(formattedPhone);
       if (!phoneExists) {
-        Alert.alert("❌ เบอร์นี้ยังไม่ได้สมัครสมาชิก", "กรุณาสมัครสมาชิกก่อน");
+        Alert.alert("Account not found", "This phone number is not registered. Please sign up first.");
         setLoading(false);
         return;
       }
 
-      // ส่ง OTP โดยส่ง recaptchaVerifier.current เป็นพารามิเตอร์ที่ 3
+      // Send OTP with recaptchaVerifier.current as third parameter
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current);
       setVerificationId(confirmation.verificationId);
-      Alert.alert("✅ OTP ถูกส่งแล้ว", "โปรดตรวจสอบข้อความในโทรศัพท์ของคุณ");
+      setOtpSent(true);
+      Alert.alert("OTP Sent", "Please check the SMS message on your phone");
     } catch (error) {
       console.error("OTP Error:", error);
-      Alert.alert("❌ ส่ง OTP ไม่สำเร็จ", error.message);
+      Alert.alert("Failed to send OTP", error.message);
     }
     setLoading(false);
   };
 
   const verifyOTP = async () => {
     if (!verificationCode) {
-      Alert.alert("⚠️ กรุณากรอกรหัส OTP");
+      Alert.alert("Please enter OTP code");
       return;
     }
 
@@ -84,112 +98,242 @@ const OTPScreen = ({ navigation }) => {
     try {
       const credential = PhoneAuthProvider.credential(verificationId, verificationCode);
       await signInWithCredential(auth, credential);
-      Alert.alert("✅ ล็อกอินสำเร็จ!", "คุณเข้าสู่ระบบด้วย OTP แล้ว");
+      Alert.alert("Login Successful", "You've been logged in with OTP");
       navigation.replace("Home");
     } catch (error) {
       console.error("Verify OTP Error:", error);
-      Alert.alert("❌ OTP ไม่ถูกต้อง", error.message);
+      Alert.alert("Invalid OTP", "The verification code you entered is incorrect");
     }
     setLoading(false);
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>เข้าสู่ระบบด้วย OTP</Text>
-
-      {/* เพิ่ม Recaptcha Modal */}
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        // optional: คุณสามารถกำหนดเพิ่มเติม เช่น timeout, attemptInvisibleVerification: true
-      />
-
-      <View style={styles.inputContainer}>
-        <MaterialIcons name="phone" size={24} color="gray" />
-        <TextInput
-          style={styles.input}
-          placeholder="Phone Number (+66...)"
-          keyboardType="phone-pad"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-        />
-      </View>
-
-      <TouchableOpacity style={styles.sendOTPButton} onPress={sendOTP} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>ส่ง OTP</Text>}
-      </TouchableOpacity>
-
-      {verificationId && (
-        <>
-          <View style={styles.inputContainer}>
-            <MaterialIcons name="vpn-key" size={24} color="gray" />
-            <TextInput
-              style={styles.input}
-              placeholder="Enter OTP"
-              keyboardType="number-pad"
-              value={verificationCode}
-              onChangeText={setVerificationCode}
-            />
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingView}
+      >
+        <ScrollView contentContainerStyle={styles.scrollView}>
+          <View style={styles.logoContainer}>
+            {/* <Image 
+              source={require('./assets/logo.png')} // Replace with your actual logo
+              style={styles.logo}
+              resizeMode="contain"
+            /> */}
           </View>
+          
+          <Text style={styles.title}>Phone Authentication</Text>
+          <Text style={styles.subtitle}>
+            {!otpSent 
+              ? "Enter your phone number to receive a verification code" 
+              : "Enter the verification code sent to your phone"}
+          </Text>
 
-          <TouchableOpacity style={styles.verifyOTPButton} onPress={verifyOTP} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>ยืนยัน OTP</Text>}
+          {/* Add Recaptcha Modal */}
+          <FirebaseRecaptchaVerifierModal
+            ref={recaptchaVerifier}
+            firebaseConfig={firebaseConfig}
+            attemptInvisibleVerification={true}
+          />
+
+          {!otpSent ? (
+            <View style={styles.card}>
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="phone" size={24} color="#5c6bc0" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Phone Number (+66...)"
+                  keyboardType="phone-pad"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                />
+              </View>
+
+              <TouchableOpacity 
+                style={styles.button} 
+                onPress={sendOTP} 
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Text style={styles.buttonText}>Send OTP</Text>
+                    <Ionicons name="arrow-forward" size={20} color="#fff" />
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.phoneDisplay}>OTP sent to: {phoneNumber}</Text>
+              
+              <View style={styles.otpInputContainer}>
+                {/* OTP input field */}
+                <TextInput
+                  style={styles.otpInput}
+                  placeholder="Enter OTP"
+                  keyboardType="number-pad"
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  maxLength={6}
+                />
+              </View>
+
+              <TouchableOpacity 
+                style={styles.verifyButton} 
+                onPress={verifyOTP} 
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify & Login</Text>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.resendButton} 
+                onPress={sendOTP} 
+                disabled={loading}
+              >
+                <Text style={styles.resendText}>Resend OTP</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity 
+            style={styles.linkButton}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.linkText}>Login with Email & Password</Text>
           </TouchableOpacity>
-        </>
-      )}
-    </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollView: {
+    flexGrow: 1,
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f4f4f4",
-    paddingHorizontal: 20,
+    padding: 20,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  logo: {
+    width: 120,
+    height: 120,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 15,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
     marginBottom: 20,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    width: "100%",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    marginBottom: 10,
-    elevation: 3,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    marginBottom: 20,
   },
   input: {
     flex: 1,
-    marginLeft: 10,
+    paddingVertical: 15,
+    paddingLeft: 10,
     fontSize: 16,
+    color: "#333",
   },
-  sendOTPButton: {
-    backgroundColor: "#007bff",
-    width: "100%",
-    paddingVertical: 12,
+  button: {
+    backgroundColor: "#5c6bc0",
+    borderRadius: 10,
+    paddingVertical: 15,
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  verifyOTPButton: {
-    backgroundColor: "#28a745",
-    width: "100%",
-    paddingVertical: 12,
-    alignItems: "center",
-    borderRadius: 8,
     marginTop: 10,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
+    fontWeight: "600",
+    marginRight: 10,
   },
-};
+  phoneDisplay: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  otpInputContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  otpInput: {
+    backgroundColor: "#f5f5f5",
+    width: "100%",
+    textAlign: "center",
+    paddingVertical: 15,
+    fontSize: 20,
+    letterSpacing: 5,
+    borderRadius: 10,
+  },
+  verifyButton: {
+    backgroundColor: "#4caf50",
+    borderRadius: 10,
+    paddingVertical: 15,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  resendButton: {
+    paddingVertical: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  resendText: {
+    color: "#5c6bc0",
+    fontSize: 16,
+  },
+  linkButton: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  linkText: {
+    color: "#5c6bc0",
+    fontSize: 16,
+  },
+});
 
 export default OTPScreen;

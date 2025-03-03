@@ -128,11 +128,11 @@ const LoginScreen = ({ navigation }) => {
           style={styles.headerGradient}
         >
           <View style={styles.headerContent}>
-            <Image
-              source={require("./assets/login-icon.png")} // Make sure to add this imag
+            {/* <Image
+              source={require("./assets/login-icon.jpg")} // Make sure to add this imag
               style={styles.logo}
               resizeMode="contain"
-            />
+            /> */}
             <Text style={styles.appName}>EduConnect</Text>
             <Text style={styles.tagline}>Learn, Connect, Succeed</Text>
           </View>
