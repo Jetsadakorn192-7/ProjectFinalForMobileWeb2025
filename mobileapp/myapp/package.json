@@ -31,7 +31,8 @@
     "react-native-screens": "^4.9.1",
     "react-native-vision-camera": "*",
     "react-native-webview": "^13.13.2",
-    "react-native-worklets-core": "*"
+    "react-native-worklets-core": "*",
+    "expo-linear-gradient": "~14.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
