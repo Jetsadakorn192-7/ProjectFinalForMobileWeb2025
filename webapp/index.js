@@ -1,5 +1,3 @@
-// import 'styles.css';
-
 const { Alert, Card, Button, Table, Form, Row, Col, Container} = ReactBootstrap;
 
 const firebaseConfig = {
@@ -262,38 +260,193 @@ async function addClassroom(uid, code, name, room, photoURL) {
     return cid;
 }
 
-// แก้ไข ManagaCourse component เพื่อเพิ่มแท็บคำถาม
-function ManagaCourse({ course, app }) {
+// New Assignment Tab in ManageCourse component
+function ManageCourse({ course, app }) {
     const [tab, setTab] = React.useState("details");
-
+    
     return (
-        <Card>
-            <Card.Header>
-                <h4>จัดการรายวิชา: {course.info.name}</h4>
-                <Button variant="secondary" onClick={() => app.setState({ scene: "dashboard" })}>ย้อนกลับ</Button>
-            </Card.Header>
-
-            <Card.Body>
-                <nav className="nav nav-tabs">
-                    <a className={`nav-link ${tab === "details" ? "active" : ""}`} onClick={() => setTab("details")}>รายละเอียด</a>
-                    <a className={`nav-link ${tab === "qrcode" ? "active" : ""}`} onClick={() => setTab("qrcode")}>QR Code</a>
-                    <a className={`nav-link ${tab === "students" ? "active" : ""}`} onClick={() => setTab("students")}>นักเรียน</a>
-                    <a className={`nav-link ${tab === "attendance" ? "active" : ""}`} onClick={() => setTab("attendance")}>เช็คชื่อ</a>
-                    <a className={`nav-link ${tab === "questions" ? "active" : ""}`} onClick={() => setTab("questions")}>คำถาม</a>
-                    
-                </nav>
-
-                <div className="mt-3">
-                    {tab === "details" && <CourseDetails course={course} />}
-                    {tab === "qrcode" && <CourseQRCode cid={course.id} />}
-                    {tab === "students" && <StudentList cid={course.id} />}
-                    {tab === "attendance" && <Attendance cid={course.id} />}
-                    {tab === "questions" && <ClassQuestions cid={course.id} user={app.state.user} />}
-                </div>
-            </Card.Body>
-        </Card>
+      <Card>
+        <Card.Header>
+          <h4>จัดการรายวิชา: {course.info.name}</h4>
+          <Button variant="secondary" onClick={() => app.setState({ scene: "dashboard" })}>ย้อนกลับ</Button>
+        </Card.Header>
+        <Card.Body>
+          <nav className="nav nav-tabs">
+            <a className={`nav-link ${tab === "details" ? "active" : ""}`} onClick={() => setTab("details")}>รายละเอียด</a>
+            <a className={`nav-link ${tab === "qrcode" ? "active" : ""}`} onClick={() => setTab("qrcode")}>QR Code</a>
+            <a className={`nav-link ${tab === "students" ? "active" : ""}`} onClick={() => setTab("students")}>นักเรียน</a>
+            <a className={`nav-link ${tab === "attendance" ? "active" : ""}`} onClick={() => setTab("attendance")}>เช็คชื่อ</a>
+            <a className={`nav-link ${tab === "questions" ? "active" : ""}`} onClick={() => setTab("questions")}>คำถาม</a>
+            <a className={`nav-link ${tab === "assignments" ? "active" : ""}`} onClick={() => setTab("assignments")}>โจทย์และงาน</a>
+          </nav>
+          <div className="mt-3">
+            {tab === "details" && <CourseDetails course={course} />}
+            {tab === "qrcode" && <CourseQRCode cid={course.id} />}
+            {tab === "students" && <StudentList cid={course.id} />}
+            {tab === "attendance" && <Attendance cid={course.id} />}
+            {tab === "questions" && <ClassQuestions cid={course.id} user={app.state.user} />}
+            {tab === "assignments" && <ClassAssignments cid={course.id} user={app.state.user} />}
+          </div>
+        </Card.Body>
+      </Card>
     );
-}
+  }
+// Component to manage assignments
+function ClassAssignments({ cid, user }) {
+    const [assignments, setAssignments] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    
+    React.useEffect(() => {
+      const unsubscribe = db.collection(`classroom/${cid}/assignments`)
+        .orderBy("createdAt", "desc")
+        .onSnapshot(snapshot => {
+          const assignmentData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setAssignments(assignmentData);
+          setLoading(false);
+        });
+      
+      return () => unsubscribe();
+    }, [cid]);
+    
+    const handleAddAssignment = () => {
+      const title = prompt("กรุณากรอกชื่อโจทย์:");
+      if (!title || title.trim() === "") return;
+      
+      const description = prompt("กรุณากรอกคำอธิบายโจทย์:");
+      if (!description) return;
+      
+      db.collection(`classroom/${cid}/assignments`).add({
+        title: title.trim(),
+        description: description.trim(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: "active"
+      })
+      .then(() => {
+        alert("เพิ่มโจทย์สำเร็จ");
+      })
+      .catch(error => {
+        console.error("Error adding assignment:", error);
+        alert("เกิดข้อผิดพลาดในการเพิ่มโจทย์");
+      });
+    };
+    
+    return (
+      <div>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h4>โจทย์และงานในห้องเรียน</h4>
+          <Button variant="primary" onClick={handleAddAssignment}>เพิ่มโจทย์ใหม่</Button>
+        </div>
+        
+        {loading ? (
+          <div className="text-center p-4">
+            <p>กำลังโหลดข้อมูล...</p>
+          </div>
+        ) : assignments.length > 0 ? (
+          <div>
+            {assignments.map(assignment => (
+              <Card key={assignment.id} className="mb-3">
+                <Card.Header>
+                  <h5>{assignment.title}</h5>
+                  <small className="text-muted">
+                    สร้างเมื่อ: {assignment.createdAt?.toDate().toLocaleString('th-TH')}
+                  </small>
+                </Card.Header>
+                <Card.Body>
+                  <Card.Text>{assignment.description}</Card.Text>
+                  <Button 
+                    variant="outline-primary" 
+                    onClick={() => window.location.href = `#assignment-view-${cid}-${assignment.id}`}
+                  >
+                    ดูคำตอบนักเรียน
+                  </Button>
+                </Card.Body>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center p-5 bg-light rounded">
+            <p className="mb-0">ยังไม่มีโจทย์หรืองานในวิชานี้</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // Component to view assignment responses
+  function AssignmentResponses({ assignmentId, classId }) {
+    const [submissions, setSubmissions] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    
+    React.useEffect(() => {
+      const unsubscribe = db.collection(`classroom/${classId}/assignments/${assignmentId}/submissions`)
+        .orderBy("submittedAt", "desc")
+        .onSnapshot(snapshot => {
+          const submissionData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setSubmissions(submissionData);
+          setLoading(false);
+        });
+      
+      return () => unsubscribe();
+    }, [assignmentId, classId]);
+  
+    return (
+      <div>
+        <h4>คำตอบของนักเรียน</h4>
+        
+        {loading ? (
+          <p>กำลังโหลดข้อมูล...</p>
+        ) : submissions.length > 0 ? (
+          <Table striped bordered hover>
+            <thead>
+              <tr>
+                <th>รหัสนักศึกษา</th>
+                <th>ชื่อ</th>
+                <th>คำตอบ</th>
+                <th>เวลาส่ง</th>
+                <th>คะแนน</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {submissions.map(submission => (
+                <tr key={submission.id}>
+                  <td>{submission.studentId}</td>
+                  <td>{submission.studentName}</td>
+                  <td>{submission.answer}</td>
+                  <td>{submission.submittedAt.toDate().toLocaleString('th-TH')}</td>
+                  <td>{submission.score || "-"}</td>
+                  <td>
+                    <Button 
+                      variant="outline-primary" 
+                      size="sm"
+                      onClick={() => {
+                        const score = prompt("ให้คะแนน (0-100):", submission.score);
+                        if (score !== null && !isNaN(score)) {
+                          db.collection(`classroom/${classId}/assignments/${assignmentId}/submissions`)
+                            .doc(submission.id)
+                            .update({ score: Number(score) });
+                        }
+                      }}
+                    >
+                      ให้คะแนน
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <p>ยังไม่มีนักเรียนส่งคำตอบ</p>
+        )}
+      </div>
+    );
+  }
 function CourseDetails({ course }) {
     return (
         <Container className="mt-4">
@@ -315,14 +468,105 @@ function CourseDetails({ course }) {
         </Container>
     );
 }
-function CourseQRCode({ cid }) {
+function StudentAssignmentView({ assignment, classId, user }) {
+    const [answer, setAnswer] = React.useState("");
+    const [submitted, setSubmitted] = React.useState(false);
+    const [previousAnswer, setPreviousAnswer] = React.useState("");
+    
+    React.useEffect(() => {
+      // Check if student has already submitted an answer
+      db.collection(`classroom/${classId}/assignments/${assignment.id}/submissions`)
+        .doc(user.uid)
+        .get()
+        .then(doc => {
+          if (doc.exists) {
+            setPreviousAnswer(doc.data().answer);
+            setSubmitted(true);
+          }
+        });
+    }, [assignment.id, classId, user.uid]);
+    
+    const handleSubmit = () => {
+      if (!answer.trim()) {
+        alert("กรุณากรอกคำตอบก่อนส่ง");
+        return;
+      }
+      
+      db.collection(`classroom/${classId}/assignments/${assignment.id}/submissions`)
+        .doc(user.uid)
+        .set({
+          studentId: user.uid,
+          studentName: user.displayName || "ไม่ระบุชื่อ",
+          answer: answer.trim(),
+          submittedAt: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        .then(() => {
+          alert("ส่งคำตอบเรียบร้อยแล้ว");
+          setSubmitted(true);
+          setPreviousAnswer(answer);
+        })
+        .catch(error => {
+          console.error("Error submitting answer:", error);
+          alert("เกิดข้อผิดพลาดในการส่งคำตอบ");
+        });
+    };
+    
+    return (
+      <Card className="mb-3">
+        <Card.Header>
+          <h5>{assignment.title}</h5>
+        </Card.Header>
+        <Card.Body>
+          <Card.Text>{assignment.description}</Card.Text>
+          
+          {submitted ? (
+            <div>
+              <Alert variant="success">
+                คุณได้ส่งคำตอบแล้ว
+              </Alert>
+              <h6>คำตอบของคุณ:</h6>
+              <p className="p-3 bg-light rounded">{previousAnswer}</p>
+              <Button 
+                variant="outline-primary" 
+                onClick={() => setSubmitted(false)}
+              >
+                แก้ไขคำตอบ
+              </Button>
+            </div>
+          ) : (
+            <Form>
+              <Form.Group className="mb-3">
+                <Form.Label>คำตอบของคุณ:</Form.Label>
+                <Form.Control 
+                  as="textarea" 
+                  rows={4} 
+                  value={answer} 
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="พิมพ์คำตอบของคุณที่นี่..."
+                />
+              </Form.Group>
+              <Button variant="primary" onClick={handleSubmit}>
+                ส่งคำตอบ
+              </Button>
+            </Form>
+          )}
+        </Card.Body>
+      </Card>
+    );
+  }
+  function CourseQRCode({ cid }) {
+    const qrData = `myapp://join?subjectId=${cid}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`;
+
     return (
         <div className="text-center">
             <h5>QR Code สำหรับเข้าร่วม</h5>
-            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${cid}`} alt="QR Code" />
+            <img src={qrUrl} alt="QR Code" />
         </div>
-    );
-}
+    ); 
+    }
+
+
 function StudentList({ cid }) {
     const [students, setStudents] = React.useState([]);
 
@@ -384,6 +628,35 @@ function Attendance({ cid }) {
         alert("เพิ่มการเช็คชื่อสำเร็จ");
     };
 
+    const handleSaveCheckIn = async (cno) => {
+        try {
+            const studentsRef = db.collection(`classroom/${cid}/checkin/${cno}/students`);
+            const scoresRef = db.collection(`classroom/${cid}/checkin/${cno}/scores`);
+            const snapshot = await studentsRef.get();
+
+            snapshot.forEach(doc => {
+                scoresRef.doc(doc.id).set({
+                    ...doc.data(),
+                    status: 1,
+                });
+            });
+
+            alert("บันทึกการเช็คชื่อสำเร็จ");
+        } catch (error) {
+            console.error("Error saving check-in:", error);
+        }
+    };
+
+    const handleDeleteStudent = async (cno, studentId) => {
+        if (!window.confirm("ต้องการลบรายชื่อนักศึกษานี้ใช่หรือไม่?")) return;
+        try {
+            await db.collection(`classroom/${cid}/checkin/${cno}/students`).doc(studentId).delete();
+            alert("ลบรายชื่อสำเร็จ");
+        } catch (error) {
+            console.error("Error deleting student:", error);
+        }
+    };
+
     return (
         <div>
             <Button variant="success" onClick={handleAddAttendance}>เพิ่มการเช็คชื่อ</Button>
@@ -406,7 +679,7 @@ function Attendance({ cid }) {
                             <td>{att.attendees.length}</td>
                             <td>{att.status}</td>
                             <td>
-                                {/* คุณสามารถเพิ่มปุ่มการจัดการอื่น ๆ ได้ เช่น แก้ไขหรือลบ */}
+                                <Button variant="warning" onClick={() => handleSaveCheckIn(att.id)}>บันทึกการเช็คชื่อ</Button>
                             </td>
                         </tr>
                     ))}
@@ -415,6 +688,7 @@ function Attendance({ cid }) {
         </div>
     );
 }
+
 
 // อัพเดทฟังก์ชัน ClassQuestions ให้มีการตรวจสอบและแสดงผลข้อมูลที่ดีขึ้น
 function ClassQuestions({ cid, user }) {
@@ -654,6 +928,139 @@ function ClassQuestions({ cid, user }) {
         </div>
     );
 }
+// ปุ่มบันทึกการเช็คชื่อ
+const handleSaveCheckIn = async (cid, cno) => {
+    try {
+        const studentsRef = db.collection(`classroom/${cid}/checkin/${cno}/students`);
+        const scoresRef = db.collection(`classroom/${cid}/checkin/${cno}/scores`);
+        const snapshot = await studentsRef.get();
+
+        snapshot.forEach(doc => {
+            scoresRef.doc(doc.id).set({
+                ...doc.data(),
+                status: 1,
+            });
+        });
+
+        alert("บันทึกการเช็คชื่อสำเร็จ");
+    } catch (error) {
+        console.error("Error saving check-in:", error);
+    }
+};
+
+// ปุ่มแสดงคะแนน
+function ShowScores({ cid, cno }) {
+    const [scores, setScores] = React.useState([]);
+
+    React.useEffect(() => {
+        const unsubscribe = db.collection(`classroom/${cid}/checkin/${cno}/scores`).onSnapshot(snapshot => {
+            setScores(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsubscribe();
+    }, [cid, cno]);
+
+    const handleUpdate = (id, field, value) => {
+        db.collection(`classroom/${cid}/checkin/${cno}/scores`).doc(id).update({ [field]: value });
+    };
+
+    return (
+        <div>
+            <h4>คะแนนการเช็คชื่อ</h4>
+            <Table striped bordered hover>
+                <thead>
+                    <tr>
+                        <th>ลำดับ</th>
+                        <th>รหัส</th>
+                        <th>ชื่อ</th>
+                        <th>หมายเหตุ</th>
+                        <th>วันเวลา</th>
+                        <th>คะแนน</th>
+                        <th>สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {scores.map((s, index) => (
+                        <tr key={s.id}>
+                            <td>{index + 1}</td>
+                            <td>{s.id}</td>
+                            <td>{s.name}</td>
+                            <td>
+                                <input type="text" value={s.remark || ""} onChange={(e) => handleUpdate(s.id, "remark", e.target.value)} />
+                            </td>
+                            <td>{s.timestamp?.toDate().toLocaleString()}</td>
+                            <td>
+                                <input type="number" value={s.score || 0} onChange={(e) => handleUpdate(s.id, "score", parseInt(e.target.value))} />
+                            </td>
+                            <td>
+                                <select value={s.status} onChange={(e) => handleUpdate(s.id, "status", e.target.value)}>
+                                    <option value="1">ผ่าน</option>
+                                    <option value="0">ไม่ผ่าน</option>
+                                </select>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </Table>
+            <Button variant="success" onClick={() => handleSaveCheckIn(cid, cno)}>บันทึกการเช็คชื่อ</Button>
+        </div>
+    );
+}
+
+// ปุ่มลบรายชื่อนักศึกษา
+const handleDeleteStudent = async (cid, cno, studentId) => {
+    if (!window.confirm("ต้องการลบรายชื่อนักศึกษานี้ใช่หรือไม่?")) return;
+
+    try {
+        await db.collection(`classroom/${cid}/checkin/${cno}/students`).doc(studentId).delete();
+        alert("ลบรายชื่อสำเร็จ");
+    } catch (error) {
+        console.error("Error deleting student:", error);
+    }
+};
+
+// ปุ่มแสดงรายชื่อนักศึกษาที่เช็คชื่อ
+function StudentCheckInList({ cid, cno }) {
+    const [students, setStudents] = React.useState([]);
+
+    React.useEffect(() => {
+        const unsubscribe = db.collection(`classroom/${cid}/checkin/${cno}/students`).onSnapshot(snapshot => {
+            setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsubscribe();
+    }, [cid, cno]);
+
+    return (
+        <div>
+            <h4>รายชื่อผู้เช็คชื่อ</h4>
+            <Table striped bordered hover>
+                <thead>
+                    <tr>
+                        <th>ลำดับ</th>
+                        <th>รหัส</th>
+                        <th>ชื่อ</th>
+                        <th>หมายเหตุ</th>
+                        <th>วันเวลา</th>
+                        <th>จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {students.map((s, index) => (
+                        <tr key={s.id}>
+                            <td>{index + 1}</td>
+                            <td>{s.id}</td>
+                            <td>{s.name}</td>
+                            <td>{s.remark || ""}</td>
+                            <td>{s.timestamp?.toDate().toLocaleString()}</td>
+                            <td>
+                                <Button variant="danger" onClick={() => handleDeleteStudent(cid, cno, s.id)}>ลบ</Button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </Table>
+        </div>
+    );
+}
 
 class App extends React.Component {
     state = {
@@ -856,75 +1263,56 @@ componentDidMount() {
             scene: "manageCourse",
             currentCourse: course
         });
-    }
-
-    
+    }   
 
     render() {
         if (!this.state.user) return <LandingPage onLogin={this.google_login} />;
         return (
-            <Card>
+            <div style={{ display: "flex", height: "100vh" }}>
+                
+                {/* Sidebar Profile */}
                 <div style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    backgroundColor: "#f9d5cd",
+                    width: "250px", 
+                    backgroundColor: "#75464A", 
+                    padding: "20px", 
+                    borderRight: "1px solid #ddd",
+                    boxShadow: "2px 0px 5px rgba(0, 0, 0, 0.1)",
                     height: "100vh",
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    backgroundAttachment: "fixed",
-                    padding: "20px"
+                    position: "fixed",
+                    left: 0,
+                    top: 0
                 }}>
-                    <Card.Header style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: "#ffffff",
-                        padding: "20px",
-                        borderRadius: "12px",
-                        boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
-                        width: "100%",
-                        textAlign: "center"
-                    }}>
-                        <img src={this.state.user.photoURL} alt="Profile" width="150" className="rounded-circle" style={{ marginBottom: "15px" }} />
-                        <h4 style={{ marginBottom: "10px", fontSize: "30px" }}>{this.state.user.displayName}</h4>
-                        <p style={{ color: "#777", marginBottom: "20px", fontSize: "18px" }}>({this.state.user.email})</p>
-
-                        <div style={{ display: "flex", flexDirection: "row", gap: "10px", width: "25%", height: "55px" }}>
-                            <Button variant="primary" onClick={() => this.setState({ scene: "addSubject" })} style={{ width: "100%" }}>
-                                เพิ่มวิชา
-                            </Button>
-                            <Button variant="secondary" onClick={() => this.setState({ scene: "editProfile" })} style={{ width: "100%" }}>
-                                แก้ไขโปรไฟล์
-                            </Button>
-                            <Button variant="danger" onClick={this.google_logout} style={{ width: "100%" }}>
-                                ออกจากระบบ
-                            </Button>
-                            {/* เพิ่มปุ่มใหม่เพื่อเรียกฟังก์ชันถามคำถาม
-                            <Button variant="info" onClick={this.askQuestion} style={{ width: "100%" }}>
-                                ถามคำถาม
-                            </Button> */}
-                        </div>
-                    </Card.Header>
-
-                    <Card.Body style={{ width: "100%", paddingTop: "20px" }}>
-                        {this.state.scene === "addSubject" ? (
-                            <AddSubject user={this.state.user} app={this} />
-                        ) : this.state.scene === "editProfile" ? (
-                            <EditProfile user={this.state.user} app={this} />
-                        ) : this.state.scene === "manageCourse" ? (
-                            <ManagaCourse course={this.state.currentCourse} app={this} />
-                        ) : (
-                            <AllCourses data={this.state.courses} app={this} />
-                        )}
-                    </Card.Body>
+                    <img src={this.state.user.photoURL} alt="Profile" width="100" className="rounded-circle" />
+                    <h4 style={{ marginTop: "15px" }}>{this.state.user.displayName}</h4>
+                    <p style={{ color: "#777", fontSize: "14px" }}>{this.state.user.email}</p>
+    
+                    <Button variant="primary" onClick={() => this.setState({ scene: "addSubject" })} className="w-100 mb-2">
+                        เพิ่มวิชา
+                    </Button>
+                    <Button variant="secondary" onClick={() => this.setState({ scene: "editProfile" })} className="w-100 mb-2">
+                        แก้ไขโปรไฟล์
+                    </Button>
+                    <Button variant="danger" onClick={this.google_logout} className="w-100 mb-2">
+                        ออกจากระบบ
+                    </Button>
+                    
                 </div>
-            </Card>
+    
+                {/* Main Content */}
+                <div style={{ marginLeft: "250px", width: "100%", padding: "20px" }}>
+                    {this.state.scene === "addSubject" ? (
+                        <AddSubject user={this.state.user} app={this} />
+                    ) : this.state.scene === "editProfile" ? (
+                        <EditProfile user={this.state.user} app={this} />
+                    ) : this.state.scene === "manageCourse" ? (
+                        <ManageCourse course={this.state.currentCourse} app={this} />
+                    ) : (
+                        <AllCourses data={this.state.courses} app={this} />
+                    )}
+                </div>
+            </div>
         );
     }
 }
-
 const root = ReactDOM.createRoot(document.getElementById("webapp"));
 root.render(<App />); 
