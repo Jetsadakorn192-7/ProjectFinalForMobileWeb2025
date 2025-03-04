@@ -1,22 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  Alert, 
-  ActivityIndicator, 
-  StyleSheet, 
-  SafeAreaView, 
-  StatusBar, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
   Dimensions,
-  Image 
 } from "react-native";
-import { auth, db, signOut, onAuthStateChanged, doc, getDoc, updateDoc, arrayUnion } from "./firebaseConfig";
+import { auth, db, signOut, onAuthStateChanged, doc, getDoc, setDoc } from "./firebaseConfig";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from "@expo/vector-icons";
+import { ImageBackground, LinearGradient } from "expo-linear-gradient";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 const HomeScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
@@ -24,12 +23,16 @@ const HomeScreen = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [joinedClass, setJoinedClass] = useState(null);
 
-  // Check if user is logged in
+  // ตรวจสอบว่าผู้ใช้ล็อกอินหรือไม่
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         await fetchUserData(user.uid);
+        // ตัวอย่าง: หากมีฟังก์ชัน fetchRegisteredClasses / fetchClassNames
+        await fetchRegisteredClasses(user.uid);
+        await fetchClassNames();
       } else {
         navigation.replace("Login");
       }
@@ -37,267 +40,215 @@ const HomeScreen = ({ navigation }) => {
     return unsubscribe;
   }, []);
 
-  // Function to fetch user data from Firestore
+  // ฟังก์ชันดึงข้อมูลผู้ใช้
   const fetchUserData = async (uid) => {
     try {
       const userDoc = await getDoc(doc(db, "Student", uid));
+      if (!userDoc.exists()) {
+        userDoc = await getDoc(doc(db, "users", uid));
+      }
       if (userDoc.exists()) {
         setUserData(userDoc.data());
       } else {
-        Alert.alert("User Not Found", "Your profile data could not be found");
+        Alert.alert("⚠️ ข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้ในระบบ");
       }
     } catch (error) {
-      Alert.alert("Error", error.message);
+      Alert.alert("❌ ข้อผิดพลาด", error.message);
     }
     setLoading(false);
   };
-
-  // Logout function
+  
+  // ฟังก์ชัน Logout
   const handleLogout = async () => {
     try {
       await signOut(auth);
       navigation.replace("Login");
     } catch (error) {
-      Alert.alert("Logout Failed", error.message);
+      Alert.alert("❌ ออกจากระบบไม่สำเร็จ", error.message);
     }
   };
 
-  const handleBarCodeScanned = async ({ data }) => {
-    setScanned(true);
-    setIsScanning(false);
-
-    try {
-        const user = auth.currentUser;
-        if (!user) {
-            Alert.alert("❌ Error", "Please log in first.");
-            return;
-        }
-
-        let subjectId;
-        try {
-            const urlParams = new URL(data).searchParams;
-            subjectId = urlParams.get("subjectId");
-        } catch (error) {
-            console.error("Invalid QR Code format:", error);
-            Alert.alert("❌ Error", "Invalid QR Code format.");
-            return;
-        }
-
-        if (!subjectId) {
-            Alert.alert("❌ Error", "QR Code does not contain subject information.");
-            return;
-        }
-
-        // Fetch student data
-        const studentRef = doc(db, "Student", user.uid);
-        const studentDoc = await getDoc(studentRef);
-
-        if (!studentDoc.exists()) {
-            Alert.alert("❌ Error", "Student not found in the system.");
-            return;
-        }
-
-        const studentData = studentDoc.data();
-
-        // Register student in the classroom
-        const classStudentRef = doc(db, "classroom", subjectId, "Student", user.uid);
-        await setDoc(classStudentRef, {
-            studentId: studentData.studentId || "-",
-            username: studentData.username || "Unnamed",
-            email: studentData.email || "-",
-            phoneNumber: studentData.phoneNumber || "-",
-            joinedAt: new Date()
-        });
-
-        // Save subject under Student profile
-        const studentSubjectRef = doc(db, "Student", user.uid, "subjectList", subjectId);
-        await setDoc(studentSubjectRef, {
-            code: subjectId,
-            joinedAt: new Date()
-        });
-
-        setJoinedClass(subjectId);
-        Alert.alert("✅ Enrollment Successful", `You have successfully enrolled in ${subjectId}`);
-
-    } catch (error) {
-        console.error("Error registering student:", error);
-        Alert.alert("❌ Error", "An error occurred during enrollment.");
-    }
-  };
-
-  // Start scanning function
+  // ฟังก์ชันสแกน QR
   const startScanning = async () => {
     const { granted } = await requestPermission();
     if (granted) {
       setIsScanning(true);
       setScanned(false);
     } else {
-      Alert.alert(
-        "Permission Required", 
-        "Camera access is needed to scan QR codes"
-      );
+      Alert.alert("การอนุญาตกล้องถูกปฏิเสธ", "คุณต้องอนุญาตให้ใช้กล้องเพื่อสแกน QR Code");
     }
   };
-  
-  // Stop scanning function
-  const stopScanning = () => {
+
+  // ฟังก์ชันสแกน QR Code
+  const handleBarCodeScanned = async ({ data }) => {
+    setScanned(true);
     setIsScanning(false);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert("❌ ข้อผิดพลาด", "กรุณาเข้าสู่ระบบก่อน");
+        return;
+      }
+
+      // ดึงค่า subjectId จาก URL ของ QR Code
+      const urlParams = new URL(data).searchParams;
+      const subjectId = urlParams.get("subjectId");
+
+      if (!subjectId) {
+        Alert.alert("❌ ข้อผิดพลาด", "QR Code ไม่มีข้อมูลวิชา");
+        return;
+      }
+
+      // ดึงข้อมูลของนักเรียนจาก Firestore
+      const studentRef = doc(db, "Student", user.uid);
+      const studentDoc = await getDoc(studentRef);
+
+      if (!studentDoc.exists()) {
+        Alert.alert("❌ ข้อผิดพลาด", "ไม่พบนักเรียนในระบบ");
+        return;
+      }
+
+      const studentData = studentDoc.data();
+
+      // เพิ่มนักเรียนเข้าสู่วิชาใน Firestore (classroom/{subjectId}/Student/{studentId})
+      const classStudentRef = doc(db, "classroom", subjectId, "Student", user.uid);
+      await setDoc(classStudentRef, {
+        studentId: studentData.studentId || "-",
+        username: studentData.username || "ไม่ระบุชื่อ",
+        email: studentData.email || "-",
+        phoneNumber: studentData.phoneNumber || "-",
+        joinedAt: new Date()
+      });
+
+      // บันทึกว่าผู้ใช้เข้าร่วมวิชาในคอลเลกชัน `Student/{studentId}/subjectList/{subjectId}`
+      const studentSubjectRef = doc(db, "Student", user.uid, "subjectList", subjectId);
+      await setDoc(studentSubjectRef, {
+        code: subjectId, 
+        joinedAt: new Date()
+      });
+
+      // อัปเดต UI แสดงว่านักเรียนเข้าร่วมแล้ว
+      setJoinedClass(subjectId);
+      Alert.alert("✅ ลงทะเบียนสำเร็จ", `คุณได้เข้าร่วมวิชา ${subjectId}`);
+    } catch (error) {
+      console.error("Error registering student:", error);
+      Alert.alert("❌ ข้อผิดพลาด", "เกิดข้อผิดพลาดขณะลงทะเบียน");
+    }
   };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6c63ff" />
-        <Text style={styles.loadingText}>Loading profile data...</Text>
-      </View>
-    );
-  }
-
-  if (!userData) {
-    return (
-      <View style={styles.errorContainer}>
-        <MaterialCommunityIcons name="account-alert" size={80} color="#ff5252" />
-        <Text style={styles.errorText}>Unable to load your profile</Text>
-        <TouchableOpacity 
-          style={styles.retryButton} 
-          onPress={() => fetchUserData(auth.currentUser?.uid)}
-        >
-          <Text style={styles.retryButtonText}>Try Again</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#6c63ff" />
-      
-      <LinearGradient
-        colors={['#6c63ff', '#8a84fa']}
-        style={styles.header}
-      >
-        <View style={styles.profileSummary}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {userData.username?.charAt(0).toUpperCase() || "?"}
-            </Text>
-          </View>
-          <View>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.usernameText}>{userData.username}</Text>
-          </View>
-        </View>
-      </LinearGradient>
+      <StatusBar barStyle="light-content" backgroundColor="#051e3e" />
 
-      <View style={styles.contentContainer}>
-        <View style={styles.infoCard}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="person" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Full Name</Text>
-              <Text style={styles.infoValue}>{userData.username}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="school" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Student ID</Text>
-              <Text style={styles.infoValue}>{userData.studentId}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="mail" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{userData.email}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Ionicons name="call" size={22} color="#6c63ff" style={styles.infoIcon} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Phone</Text>
-              <Text style={styles.infoValue}>{userData.phoneNumber || "Not provided"}</Text>
-            </View>
-          </View>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4f86f7" />
+          <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
         </View>
-
-        <Text style={styles.actionsTitle}>Quick Actions</Text>
-        
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={startScanning}
-          >
-            <View style={[styles.actionIcon, {backgroundColor: '#4caf50'}]}>
-              <Ionicons name="qr-code" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionText}>Scan QR Code</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate("ShowClass")}
-          >
-            <View style={[styles.actionIcon, {backgroundColor: '#2196f3'}]}>
-              <Ionicons name="list" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionText}>My Classes</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={handleLogout}
-          >
-            <View style={[styles.actionIcon, {backgroundColor: '#f44336'}]}>
-              <Ionicons name="log-out" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      {isScanning && permission?.granted && (
-        <View style={styles.scannerContainer}>
-          <StatusBar barStyle="light-content" backgroundColor="#000" />
-          <CameraView
-            style={styles.camera}
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          />
-          
-          {/* Scanner UI Overlay */}
-          <View style={styles.scannerOverlay}>
-            <View style={styles.scannerHeader}>
-              <Text style={styles.scannerTitle}>Scan Class QR Code</Text>
-              <TouchableOpacity onPress={stopScanning} style={styles.closeButton}>
-                <Ionicons name="close-circle" size={32} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.scanFrameContainer}>
-              <View style={styles.scanFrame}>
-                <View style={styles.cornerTL} />
-                <View style={styles.cornerTR} />
-                <View style={styles.cornerBL} />
-                <View style={styles.cornerBR} />
-              </View>
-              <Text style={styles.scanInstructions}>
-                Position the QR code within the frame
-              </Text>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.cancelScanButton}
-              onPress={stopScanning}
-            >
-              <Text style={styles.cancelScanText}>Cancel</Text>
+      ) : userData ? (
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerText}>My Classes</Text>
+            <TouchableOpacity style={styles.logoutIcon} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
+
+          {/* Profile Section */}
+          <View style={styles.profileSection}>
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>{userData.username?.charAt(0).toUpperCase() || "?"}</Text>
+            </View>
+            <View style={styles.userInfoContainer}>
+              <Text style={styles.userName}>{userData.username}</Text>
+              <Text style={styles.userDetails}>{userData.studentId || "ไม่มีรหัสนักศึกษา"}</Text>
+            </View>
+          </View>
+
+          {/* Notification for joined class */}
+          {joinedClass && (
+            <View style={styles.notification}>
+              <View style={styles.notificationIcon}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CD964" />
+              </View>
+              <Text style={styles.notificationText}>เข้าร่วมวิชา {joinedClass} สำเร็จแล้ว!</Text>
+            </View>
+          )}
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtonsContainer}>
+            {/* Scan QR Button */}
+            <TouchableOpacity 
+              style={styles.mainActionButton}
+              onPress={startScanning}
+            >
+              <View style={styles.buttonIconContainer}>
+                <Ionicons name="qr-code" size={32} color="#fff" />
+              </View>
+              <Text style={styles.mainActionButtonText}>สแกน QR Code</Text>
+              <Text style={styles.buttonSubtitle}>เข้าร่วมชั้นเรียนใหม่</Text>
+            </TouchableOpacity>
+
+            {/* Show Classes Button */}
+            <TouchableOpacity 
+              style={styles.secondaryActionButton}
+              onPress={() => navigation.navigate("ShowClass")}
+            >
+              <View style={styles.buttonIconContainer}>
+                <Ionicons name="book" size={28} color="#fff" />
+              </View>
+              <Text style={styles.actionButtonText}>รายวิชาของฉัน</Text>
+              <Text style={styles.buttonSubtitle}>ดูรายวิชาที่ลงทะเบียน</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Scanner Overlay */}
+          {isScanning && permission?.granted && (
+            <View style={styles.scannerOverlay}>
+              <CameraView
+                style={styles.camera}
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+              >
+                <View style={styles.scannerContent}>
+                  <View style={styles.scannerHeaderContainer}>
+                    <Text style={styles.scannerTitle}>สแกน QR Code เพื่อเข้าร่วมชั้นเรียน</Text>
+                    <TouchableOpacity 
+                      style={styles.closeButton} 
+                      onPress={() => setIsScanning(false)}
+                    >
+                      <Ionicons name="close" size={28} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.scanFrame}></View>
+                  <Text style={styles.scanInstructions}>
+                    วาง QR Code ภายในกรอบเพื่อสแกน
+                  </Text>
+                  
+                  <TouchableOpacity 
+                    style={styles.cancelScanButton}
+                    onPress={() => setIsScanning(false)}
+                  >
+                    <Text style={styles.cancelScanText}>ยกเลิก</Text>
+                  </TouchableOpacity>
+                </View>
+              </CameraView>
+            </View>
+          )}
+        </>
+      ) : (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={60} color="#FF3B30" />
+          <Text style={styles.errorText}>ไม่สามารถโหลดข้อมูลผู้ใช้ได้</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => fetchUserData(auth.currentUser?.uid)}
+          >
+            <Text style={styles.retryButtonText}>ลองใหม่</Text>
+          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
@@ -307,270 +258,215 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f6fa",
+    backgroundColor: "#051e3e",
   },
+  // Loading styles
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f5f6fa",
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#555",
-    fontWeight: "500",
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f5f6fa",
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 18,
-    color: "#555",
-    marginTop: 12,
-    marginBottom: 24,
-    textAlign: "center",
-  },
-  retryButton: {
-    backgroundColor: "#6c63ff",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    elevation: 2,
-  },
-  retryButtonText: {
     color: "#fff",
+    marginTop: 10,
     fontSize: 16,
-    fontWeight: "600",
   },
+  // Header styles
   header: {
-    paddingTop: StatusBar.currentHeight + 20,
-    paddingBottom: 30,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingTop: 10,
+    paddingBottom: 15,
   },
-  profileSummary: {
+  headerText: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  logoutIcon: {
+    padding: 8,
+  },
+  // Profile section styles
+  profileSection: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
   },
   avatarContainer: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    backgroundColor: "#4f86f7",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
-    borderWidth: 2,
-    borderColor: "#fff",
   },
   avatarText: {
-    fontSize: 26,
-    fontWeight: "bold",
     color: "#fff",
-  },
-  welcomeText: {
-    color: "rgba(255, 255, 255, 0.9)",
-    fontSize: 16,
-  },
-  usernameText: {
-    color: "#fff",
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
   },
-  contentContainer: {
-    flex: 1,
-    padding: 20,
+  userInfoContainer: {
+    marginLeft: 15,
   },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  sectionTitle: {
+  userName: {
+    color: "#fff",
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
+    fontWeight: "600",
   },
-  infoItem: {
+  userDetails: {
+    color: "#aaa",
+    fontSize: 14,
+    marginTop: 3,
+  },
+  // Notification styles
+  notification: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    backgroundColor: "rgba(76, 217, 100, 0.15)",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 20,
   },
-  infoIcon: {
-    marginRight: 12,
+  notificationIcon: {
+    marginRight: 10,
   },
-  infoContent: {
+  notificationText: {
+    color: "#4CD964",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  // Action buttons styles
+  actionButtonsContainer: {
+    paddingHorizontal: 20,
     flex: 1,
   },
-  infoLabel: {
-    fontSize: 14,
-    color: "#666",
+  mainActionButton: {
+    backgroundColor: "#4f86f7",
+    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 25,
+    marginBottom: 15,
+    alignItems: "flex-start",
   },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
+  secondaryActionButton: {
+    backgroundColor: "#1d3557",
+    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 25,
+    alignItems: "flex-start",
   },
-  actionsTitle: {
+  buttonIconContainer: {
+    marginBottom: 10,
+  },
+  mainActionButtonText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 5,
+  },
+  actionButtonText: {
+    color: "#fff",
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
+    fontWeight: "600",
+    marginBottom: 5,
   },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  actionButton: {
-    alignItems: "center",
-    width: width / 3 - 20,
-  },
-  actionIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  actionText: {
+  buttonSubtitle: {
+    color: "rgba(255, 255, 255, 0.7)",
     fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    textAlign: "center",
   },
-  // Scanner styles
-  scannerContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#000",
+  // Scanner overlay styles
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
     zIndex: 999,
   },
   camera: {
     flex: 1,
   },
-  scannerOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "space-between",
-    padding: 20,
-  },
-  scannerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: StatusBar.currentHeight || 40,
-  },
-  scannerTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-    textShadowColor: "rgba(0, 0, 0, 0.5)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  closeButton: {
-    padding: 8,
-  },
-  scanFrameContainer: {
-    alignItems: "center",
-  },
-  scanFrame: {
-    width: 250,
-    height: 250,
-    position: "relative",
-  },
-  cornerTL: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderColor: "#6c63ff",
-    width: 30,
-    height: 30,
-  },
-  cornerTR: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderColor: "#6c63ff",
-    width: 30,
-    height: 30,
-  },
-  cornerBL: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderColor: "#6c63ff",
-    width: 30,
-    height: 30,
-  },
-  cornerBR: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderColor: "#6c63ff",
-    width: 30,
-    height: 30,
-  },
-  scanInstructions: {
-    color: "#fff",
-    marginTop: 20,
-    fontSize: 16,
-    textAlign: "center",
-    maxWidth: 280,
-    textShadowColor: "rgba(0, 0, 0, 0.5)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  cancelScanButton: {
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    paddingVertical: 14,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    alignSelf: "center",
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  cancelScanText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
-
-export default HomeScreen;
+    // Scanner overlay styles (continued)
+    scannerContent: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'space-between',
+      padding: 20,
+    },
+    scannerHeaderContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 40,
+    },
+    scannerTitle: {
+      color: '#fff',
+      fontSize: 18,
+      fontWeight: '600',
+      flex: 1,
+    },
+    closeButton: {
+      padding: 8,
+    },
+    scanFrame: {
+      width: 250,
+      height: 250,
+      borderWidth: 2,
+      borderColor: '#4f86f7',
+      alignSelf: 'center',
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'transparent',
+      borderRadius: 12,
+      borderStyle: 'dashed',
+    },
+    scanInstructions: {
+      color: '#fff',
+      textAlign: 'center',
+      marginTop: 20,
+      fontSize: 16,
+    },
+    cancelScanButton: {
+      backgroundColor: 'rgba(255, 59, 48, 0.8)',
+      paddingVertical: 14,
+      borderRadius: 8,
+      marginBottom: 30,
+      alignItems: 'center',
+    },
+    cancelScanText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    // Error display styles
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    errorText: {
+      color: '#fff',
+      fontSize: 18,
+      textAlign: 'center',
+      marginTop: 10,
+      marginBottom: 20,
+    },
+    retryButton: {
+      backgroundColor: '#4f86f7',
+      paddingVertical: 12,
+      paddingHorizontal: 25,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+  
+  export default HomeScreen;

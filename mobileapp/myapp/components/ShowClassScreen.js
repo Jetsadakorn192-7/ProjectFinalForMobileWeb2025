@@ -188,7 +188,7 @@ const ShowClassScreen = ({ navigation }) => {
       </Text>
       <TouchableOpacity 
         style={styles.addClassButton}
-        onPress={() => navigation.navigate("AddClass")} // Assuming you have an AddClass screen
+        onPress={() => navigation.navigate("classroom")} // Assuming you have an AddClass screen
       >
         <Text style={styles.addClassText}>Add a Class</Text>
       </TouchableOpacity>

@@ -316,10 +316,14 @@ function CourseDetails({ course }) {
     );
 }
 function CourseQRCode({ cid }) {
+    // ใช้ URL ที่มีโปรโตคอลชัดเจนและโครงสร้างที่แน่นอน
+    // เช่น myapp://join เป็น custom URL scheme ที่ง่ายและไม่จำเป็นต้องเป็นเว็บไซต์จริง
+    const qrData = `myapp://join?subjectId=${cid}`;
+    
     return (
         <div className="text-center">
             <h5>QR Code สำหรับเข้าร่วม</h5>
-            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${cid}`} alt="QR Code" />
+            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`} alt="QR Code" />
         </div>
     );
 }
