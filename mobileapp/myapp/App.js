@@ -8,6 +8,7 @@ import RegisterScreen from "./components/RegisterScreen";
 import LinkPhoneScreen from "./components/LinkEmailAndPhone";  
 import ShowClassScreen from "./components/ShowClassScreen";
 import OTPScreen from "./components/OTPScreen";
+import ClassDetail from "./components/ClassDetail";
 
 const Stack = createStackNavigator();
 
@@ -21,6 +22,7 @@ export default function App() {
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="LinkEmailAndPhone" component={LinkPhoneScreen}/>
         <Stack.Screen name="ShowClass" component={ShowClassScreen} />
+        <Stack.Screen name="ClassDetail" component={ClassDetail}/>
       </Stack.Navigator>
     </NavigationContainer>
   );
