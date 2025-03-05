@@ -241,6 +241,18 @@ const ShowClassScreen = ({ navigation }) => {
           <Ionicons name="checkmark-circle" size={18} color="#fff" />
           <Text style={styles.actionButtonText}>เช็คชื่อ</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+                  style={styles.modalButtons}
+                  onPress={() => {
+                    if (item.id) {
+                      navigation.navigate("ClassDetail", { cid: item.id });
+                    } else {
+                      Alert.alert("⚠️ ข้อมูลไม่ถูกต้อง");
+                    }
+                  }}
+                >
+                  <Text style={styles.confirmButtons}>ห้องเรียน</Text>
+          </TouchableOpacity>
       </View>
     </LinearGradient>
   );
@@ -347,7 +359,7 @@ const ShowClassScreen = ({ navigation }) => {
               <Text style={styles.inputLabel}>รหัสเช็คชื่อ</Text>
               <TextInput
                 style={styles.input}
-                placeholder="กรอกรหัสเช็คชื่อที่อาจารย์ให้"
+                placeholder="กรอกรหัสนักศึกษา"
                 value={checkinCode}
                 onChangeText={setCheckinCode}
                 keyboardType="number-pad"
@@ -356,7 +368,7 @@ const ShowClassScreen = ({ navigation }) => {
             </View>
             
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>ถามคำถาม</Text>
+              <Text style={styles.inputLabel}>หมายเหตุ (ถ้ามี)</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder=""
@@ -697,6 +709,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  modalButtons: {
+    backgroundColor: '#3498db', // Example color
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    flex: 0.48,
+  },
+  confirmButtons: {
+    color: '#fff', // Make sure the text color contrasts with the background
+    fontSize: 18,
+  },
+
 });
 
 export default ShowClassScreen;

@@ -13,7 +13,6 @@ import {
 import { auth, db, signOut, onAuthStateChanged, doc, getDoc, setDoc } from "./firebaseConfig";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
-import { ImageBackground, LinearGradient } from "expo-linear-gradient";
 
 const { width, height } = Dimensions.get("window");
 
@@ -25,12 +24,12 @@ const HomeScreen = ({ navigation }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [joinedClass, setJoinedClass] = useState(null);
 
-  // ตรวจสอบว่าผู้ใช้ล็อกอินหรือไม่
+  // Check if user is logged in
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         await fetchUserData(user.uid);
-        // ตัวอย่าง: หากมีฟังก์ชัน fetchRegisteredClasses / fetchClassNames
+        // Example: if there are fetchRegisteredClasses / fetchClassNames functions
         await fetchRegisteredClasses(user.uid);
         await fetchClassNames();
       } else {
@@ -40,7 +39,7 @@ const HomeScreen = ({ navigation }) => {
     return unsubscribe;
   }, []);
 
-  // ฟังก์ชันดึงข้อมูลผู้ใช้
+  // Function to fetch user data
   const fetchUserData = async (uid) => {
     try {
       const userDoc = await getDoc(doc(db, "Student", uid));
@@ -50,36 +49,36 @@ const HomeScreen = ({ navigation }) => {
       if (userDoc.exists()) {
         setUserData(userDoc.data());
       } else {
-        Alert.alert("⚠️ ข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้ในระบบ");
+        Alert.alert("⚠️ Error", "User data not found in the system");
       }
     } catch (error) {
-      Alert.alert("❌ ข้อผิดพลาด", error.message);
+      Alert.alert("❌ Error", error.message);
     }
     setLoading(false);
   };
   
-  // ฟังก์ชัน Logout
+  // Logout function
   const handleLogout = async () => {
     try {
       await signOut(auth);
       navigation.replace("Login");
     } catch (error) {
-      Alert.alert("❌ ออกจากระบบไม่สำเร็จ", error.message);
+      Alert.alert("❌ Logout Failed", error.message);
     }
   };
 
-  // ฟังก์ชันสแกน QR
+  // Function to start scanning QR
   const startScanning = async () => {
     const { granted } = await requestPermission();
     if (granted) {
       setIsScanning(true);
       setScanned(false);
     } else {
-      Alert.alert("การอนุญาตกล้องถูกปฏิเสธ", "คุณต้องอนุญาตให้ใช้กล้องเพื่อสแกน QR Code");
+      Alert.alert("Camera Permission Denied", "You need to allow camera access to scan QR codes");
     }
   };
 
-  // ฟังก์ชันสแกน QR Code
+  // QR Code scanning function
   const handleBarCodeScanned = async ({ data }) => {
     setScanned(true);
     setIsScanning(false);
@@ -87,53 +86,53 @@ const HomeScreen = ({ navigation }) => {
     try {
       const user = auth.currentUser;
       if (!user) {
-        Alert.alert("❌ ข้อผิดพลาด", "กรุณาเข้าสู่ระบบก่อน");
+        Alert.alert("❌ Error", "Please log in first");
         return;
       }
 
-      // ดึงค่า subjectId จาก URL ของ QR Code
+      // Extract subjectId from QR Code URL
       const urlParams = new URL(data).searchParams;
       const subjectId = urlParams.get("subjectId");
 
       if (!subjectId) {
-        Alert.alert("❌ ข้อผิดพลาด", "QR Code ไม่มีข้อมูลวิชา");
+        Alert.alert("❌ Error", "QR Code doesn't contain course information");
         return;
       }
 
-      // ดึงข้อมูลของนักเรียนจาก Firestore
+      // Fetch student data from Firestore
       const studentRef = doc(db, "Student", user.uid);
       const studentDoc = await getDoc(studentRef);
 
       if (!studentDoc.exists()) {
-        Alert.alert("❌ ข้อผิดพลาด", "ไม่พบนักเรียนในระบบ");
+        Alert.alert("❌ Error", "Student not found in the system");
         return;
       }
 
       const studentData = studentDoc.data();
 
-      // เพิ่มนักเรียนเข้าสู่วิชาใน Firestore (classroom/{subjectId}/Student/{studentId})
+      // Add student to the course in Firestore (classroom/{subjectId}/Student/{studentId})
       const classStudentRef = doc(db, "classroom", subjectId, "Student", user.uid);
       await setDoc(classStudentRef, {
         studentId: studentData.studentId || "-",
-        username: studentData.username || "ไม่ระบุชื่อ",
+        username: studentData.username || "No Name",
         email: studentData.email || "-",
         phoneNumber: studentData.phoneNumber || "-",
         joinedAt: new Date()
       });
 
-      // บันทึกว่าผู้ใช้เข้าร่วมวิชาในคอลเลกชัน `Student/{studentId}/subjectList/{subjectId}`
+      // Record that the user joined the course in `Student/{studentId}/subjectList/{subjectId}`
       const studentSubjectRef = doc(db, "Student", user.uid, "subjectList", subjectId);
       await setDoc(studentSubjectRef, {
         code: subjectId, 
         joinedAt: new Date()
       });
 
-      // อัปเดต UI แสดงว่านักเรียนเข้าร่วมแล้ว
+      // Update UI to show student has joined
       setJoinedClass(subjectId);
-      Alert.alert("✅ ลงทะเบียนสำเร็จ", `คุณได้เข้าร่วมวิชา ${subjectId}`);
+      Alert.alert("✅ Registration Successful", `You've joined course ${subjectId}`);
     } catch (error) {
       console.error("Error registering student:", error);
-      Alert.alert("❌ ข้อผิดพลาด", "เกิดข้อผิดพลาดขณะลงทะเบียน");
+      Alert.alert("❌ Error", "An error occurred during registration");
     }
   };
 
@@ -144,7 +143,7 @@ const HomeScreen = ({ navigation }) => {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4f86f7" />
-          <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
+          <Text style={styles.loadingText}>Loading data...</Text>
         </View>
       ) : userData ? (
         <>
@@ -163,7 +162,9 @@ const HomeScreen = ({ navigation }) => {
             </View>
             <View style={styles.userInfoContainer}>
               <Text style={styles.userName}>{userData.username}</Text>
-              <Text style={styles.userDetails}>{userData.studentId || "ไม่มีรหัสนักศึกษา"}</Text>
+              <Text style={styles.userDetails}>{userData.studentId || "No student ID"}</Text>
+              <Text style={styles.userDetails}>{userData.email}</Text>
+              <Text style={styles.userDetails}>{userData.phoneNumber || "-"}</Text>
             </View>
           </View>
 
@@ -173,7 +174,7 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.notificationIcon}>
                 <Ionicons name="checkmark-circle" size={24} color="#4CD964" />
               </View>
-              <Text style={styles.notificationText}>เข้าร่วมวิชา {joinedClass} สำเร็จแล้ว!</Text>
+              <Text style={styles.notificationText}>Successfully joined course {joinedClass}!</Text>
             </View>
           )}
 
@@ -187,8 +188,8 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.buttonIconContainer}>
                 <Ionicons name="qr-code" size={32} color="#fff" />
               </View>
-              <Text style={styles.mainActionButtonText}>สแกน QR Code</Text>
-              <Text style={styles.buttonSubtitle}>เข้าร่วมชั้นเรียนใหม่</Text>
+              <Text style={styles.mainActionButtonText}>Scan QR Code</Text>
+              <Text style={styles.buttonSubtitle}>Join a new class</Text>
             </TouchableOpacity>
 
             {/* Show Classes Button */}
@@ -199,8 +200,8 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.buttonIconContainer}>
                 <Ionicons name="book" size={28} color="#fff" />
               </View>
-              <Text style={styles.actionButtonText}>รายวิชาของฉัน</Text>
-              <Text style={styles.buttonSubtitle}>ดูรายวิชาที่ลงทะเบียน</Text>
+              <Text style={styles.actionButtonText}>My Courses</Text>
+              <Text style={styles.buttonSubtitle}>View enrolled courses</Text>
             </TouchableOpacity>
           </View>
 
@@ -214,7 +215,7 @@ const HomeScreen = ({ navigation }) => {
               >
                 <View style={styles.scannerContent}>
                   <View style={styles.scannerHeaderContainer}>
-                    <Text style={styles.scannerTitle}>สแกน QR Code เพื่อเข้าร่วมชั้นเรียน</Text>
+                    <Text style={styles.scannerTitle}>Scan QR Code to join class</Text>
                     <TouchableOpacity 
                       style={styles.closeButton} 
                       onPress={() => setIsScanning(false)}
@@ -225,14 +226,14 @@ const HomeScreen = ({ navigation }) => {
                   
                   <View style={styles.scanFrame}></View>
                   <Text style={styles.scanInstructions}>
-                    วาง QR Code ภายในกรอบเพื่อสแกน
+                    Place the QR code within the frame to scan
                   </Text>
                   
                   <TouchableOpacity 
                     style={styles.cancelScanButton}
                     onPress={() => setIsScanning(false)}
                   >
-                    <Text style={styles.cancelScanText}>ยกเลิก</Text>
+                    <Text style={styles.cancelScanText}>Cancel</Text>
                   </TouchableOpacity>
                 </View>
               </CameraView>
@@ -242,12 +243,12 @@ const HomeScreen = ({ navigation }) => {
       ) : (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={60} color="#FF3B30" />
-          <Text style={styles.errorText}>ไม่สามารถโหลดข้อมูลผู้ใช้ได้</Text>
+          <Text style={styles.errorText}>Could not load user data</Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => fetchUserData(auth.currentUser?.uid)}
           >
-            <Text style={styles.retryButtonText}>ลองใหม่</Text>
+            <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -390,83 +391,83 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
-    // Scanner overlay styles (continued)
-    scannerContent: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'space-between',
-      padding: 20,
-    },
-    scannerHeaderContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 40,
-    },
-    scannerTitle: {
-      color: '#fff',
-      fontSize: 18,
-      fontWeight: '600',
-      flex: 1,
-    },
-    closeButton: {
-      padding: 8,
-    },
-    scanFrame: {
-      width: 250,
-      height: 250,
-      borderWidth: 2,
-      borderColor: '#4f86f7',
-      alignSelf: 'center',
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'transparent',
-      borderRadius: 12,
-      borderStyle: 'dashed',
-    },
-    scanInstructions: {
-      color: '#fff',
-      textAlign: 'center',
-      marginTop: 20,
-      fontSize: 16,
-    },
-    cancelScanButton: {
-      backgroundColor: 'rgba(255, 59, 48, 0.8)',
-      paddingVertical: 14,
-      borderRadius: 8,
-      marginBottom: 30,
-      alignItems: 'center',
-    },
-    cancelScanText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    // Error display styles
-    errorContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 20,
-    },
-    errorText: {
-      color: '#fff',
-      fontSize: 18,
-      textAlign: 'center',
-      marginTop: 10,
-      marginBottom: 20,
-    },
-    retryButton: {
-      backgroundColor: '#4f86f7',
-      paddingVertical: 12,
-      paddingHorizontal: 25,
-      borderRadius: 8,
-    },
-    retryButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-  });
-  
-  export default HomeScreen;
+  // Scanner overlay styles (continued)
+  scannerContent: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'space-between',
+    padding: 20,
+  },
+  scannerHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  scannerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: '#4f86f7',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    borderStyle: 'dashed',
+  },
+  scanInstructions: {
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
+  },
+  cancelScanButton: {
+    backgroundColor: 'rgba(255, 59, 48, 0.8)',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  cancelScanText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Error display styles
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#4f86f7',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
+export default HomeScreen;
