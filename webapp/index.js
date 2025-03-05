@@ -604,6 +604,7 @@ function StudentList({ cid }) {
 
 function Attendance({ cid }) {
     const [attendances, setAttendances] = React.useState([]);
+    const [selectedAttendance, setSelectedAttendance] = React.useState(null);
 
     React.useEffect(() => {
         const unsubscribe = db.collection(`classroom/${cid}/attendance`)
@@ -628,35 +629,6 @@ function Attendance({ cid }) {
         alert("เพิ่มการเช็คชื่อสำเร็จ");
     };
 
-    const handleSaveCheckIn = async (cno) => {
-        try {
-            const studentsRef = db.collection(`classroom/${cid}/checkin/${cno}/students`);
-            const scoresRef = db.collection(`classroom/${cid}/checkin/${cno}/scores`);
-            const snapshot = await studentsRef.get();
-
-            snapshot.forEach(doc => {
-                scoresRef.doc(doc.id).set({
-                    ...doc.data(),
-                    status: 1,
-                });
-            });
-
-            alert("บันทึกการเช็คชื่อสำเร็จ");
-        } catch (error) {
-            console.error("Error saving check-in:", error);
-        }
-    };
-
-    const handleDeleteStudent = async (cno, studentId) => {
-        if (!window.confirm("ต้องการลบรายชื่อนักศึกษานี้ใช่หรือไม่?")) return;
-        try {
-            await db.collection(`classroom/${cid}/checkin/${cno}/students`).doc(studentId).delete();
-            alert("ลบรายชื่อสำเร็จ");
-        } catch (error) {
-            console.error("Error deleting student:", error);
-        }
-    };
-
     return (
         <div>
             <Button variant="success" onClick={handleAddAttendance}>เพิ่มการเช็คชื่อ</Button>
@@ -667,7 +639,6 @@ function Attendance({ cid }) {
                         <th>ลำดับ</th>
                         <th>วัน-เวลา</th>
                         <th>จำนวนคนเข้าเรียน</th>
-                        <th>สถานะ</th>
                         <th>จัดการ</th>
                     </tr>
                 </thead>
@@ -677,10 +648,76 @@ function Attendance({ cid }) {
                             <td>{index + 1}</td>
                             <td>{att.date.toDate().toLocaleString()}</td>
                             <td>{att.attendees.length}</td>
-                            <td>{att.status}</td>
                             <td>
-                                <Button variant="warning" onClick={() => handleSaveCheckIn(att.id)}>บันทึกการเช็คชื่อ</Button>
+                                <Button
+                                    variant="info"
+                                    onClick={() => setSelectedAttendance(att.id)}
+                                    className="me-2"
+                                >
+                                    ดูรายละเอียด
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    onClick={() => handleDeleteAttendance(cid, att.id)}
+                                >
+                                    ลบการเช็คชื่อ
+                                </Button>
                             </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </Table>
+
+            {selectedAttendance && (
+                <div className="mt-4">
+                    <AttendanceDetails cid={cid} attendanceId={selectedAttendance} />
+                    <Button
+                        variant="secondary"
+                        onClick={() => setSelectedAttendance(null)}
+                        className="mt-3"
+                    >
+                        ปิดรายละเอียด
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}
+function AttendanceDetails({ cid, attendanceId }) {
+    const [attendees, setAttendees] = React.useState([]);
+
+    React.useEffect(() => {
+        const unsubscribe = db.collection(`classroom/${cid}/attendance/${attendanceId}/attendees`)
+            .onSnapshot(snapshot => {
+                const attendeesData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }));
+                setAttendees(attendeesData);
+            });
+
+        return () => unsubscribe();
+    }, [cid, attendanceId]);
+
+    return (
+        <div>
+            <h5>รายชื่อนักเรียนที่เช็คชื่อ</h5>
+            <Table striped bordered hover>
+                <thead>
+                    <tr>
+                        <th>ลำดับ</th>
+                        <th>รหัสนักศึกษา</th>
+                        <th>ชื่อ</th>
+                        <th>เวลาที่เช็คชื่อ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {attendees.map((attendee, index) => (
+                        <tr key={attendee.id}>
+                            <td>{index + 1}</td>
+                            <td>{attendee.studentId}</td>
+                            <td>{attendee.studentName}</td>
+                            <td>{attendee.timestamp?.toDate().toLocaleString()}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -688,8 +725,17 @@ function Attendance({ cid }) {
         </div>
     );
 }
+const handleDeleteAttendance = async (cid, attendanceId) => {
+    if (!window.confirm("ต้องการลบการเช็คชื่อนี้ใช่หรือไม่?")) return;
 
-
+    try {
+        await db.collection(`classroom/${cid}/attendance`).doc(attendanceId).delete();
+        alert("ลบการเช็คชื่อสำเร็จ");
+    } catch (error) {
+        console.error("Error deleting attendance:", error);
+        alert("เกิดข้อผิดพลาดในการลบการเช็คชื่อ");
+    }
+};
 // อัพเดทฟังก์ชัน ClassQuestions ให้มีการตรวจสอบและแสดงผลข้อมูลที่ดีขึ้น
 function ClassQuestions({ cid, user }) {
     const [questions, setQuestions] = React.useState([]);

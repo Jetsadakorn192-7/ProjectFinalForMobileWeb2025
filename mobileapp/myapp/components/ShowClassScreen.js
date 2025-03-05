@@ -7,12 +7,12 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
-  Image,
   Modal,
   TextInput,
   StatusBar,
   ImageBackground,
   Animated,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
@@ -24,13 +24,14 @@ import {
   getDocs,
   getDoc,
   setDoc,
+  query,
+  where,
 } from "./firebaseConfig";
 
 const ShowClassScreen = ({ navigation }) => {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [studentId, setStudentId] = useState("");
-  const [isCheckinOpen, setIsCheckinOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
   const [checkinCode, setCheckinCode] = useState('');
@@ -38,25 +39,28 @@ const ShowClassScreen = ({ navigation }) => {
   const [searchText, setSearchText] = useState('');
   const [successAnimation] = useState(new Animated.Value(0));
   const [showSuccess, setShowSuccess] = useState(false);
-  
+  const [refreshing, setRefreshing] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+
   // Animation for success notification
   const animateSuccess = () => {
     setShowSuccess(true);
-    Animated.sequence([
-      Animated.timing(successAnimation, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.delay(2000),
-      Animated.timing(successAnimation, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setShowSuccess(false));
+    Animated.spring(successAnimation, {
+      toValue: 1,
+      friction: 5,
+      useNativeDriver: true,
+    }).start(() => {
+      setTimeout(() => {
+        Animated.spring(successAnimation, {
+          toValue: 0,
+          friction: 5,
+          useNativeDriver: true,
+        }).start(() => setShowSuccess(false));
+      }, 2000);
+    });
   };
 
+  // Fetch classes from Firestore
   const fetchClasses = async () => {
     try {
       const user = auth.currentUser;
@@ -77,39 +81,46 @@ const ShowClassScreen = ({ navigation }) => {
       }
 
       const classIds = querySnapshot.docs.map((doc) => doc.id);
-      const classPromises = classIds.map(async (classId) => {
-        const classRef = doc(db, "classroom", classId);
-        const classSnap = await getDoc(classRef);
-        if (classSnap.exists()) {
-          return { id: classId, ...classSnap.data().info };
-        }
-        return null;
-      });
+      const classesQuery = query(
+        collection(db, "classroom"),
+        where("__name__", "in", classIds)
+      );
+      const classesSnapshot = await getDocs(classesQuery);
 
-      const classData = (await Promise.all(classPromises)).filter(Boolean);
+      const classData = classesSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data().info,
+      }));
       setClasses(classData);
     } catch (error) {
       Alert.alert("เกิดข้อผิดพลาด", error.message);
     }
     setLoading(false);
+    setRefreshing(false);
   };
 
+  // Fetch classes on component mount and when screen is focused
   useEffect(() => {
     fetchClasses();
-    checkCheckinStatus();
     const unsubscribe = navigation.addListener("focus", () => {
       fetchClasses();
-      checkCheckinStatus();
     });
     return unsubscribe;
   }, [navigation]);
 
+  // Handle check-in process
   const markAttendance = async () => {
     if (!selectedClass || !checkinCode) {
       Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสเช็คชื่อ");
       return;
     }
 
+    if (!/^\d{6}$/.test(checkinCode)) {
+      Alert.alert("รหัสไม่ถูกต้อง", "รหัสเช็คชื่อต้องเป็นตัวเลข 6 หลัก");
+      return;
+    }
+
+    setIsCheckingIn(true);
     try {
       const user = auth.currentUser;
       if (!user) {
@@ -118,7 +129,6 @@ const ShowClassScreen = ({ navigation }) => {
         return;
       }
 
-      // ดึงข้อมูลนักเรียน
       const studentRef = doc(db, "Student", user.uid);
       const studentSnap = await getDoc(studentRef);
 
@@ -132,7 +142,6 @@ const ShowClassScreen = ({ navigation }) => {
       const sid = studentData.studentId || "N/A";
       const username = studentData.username || "ไม่มีชื่อ";
 
-      // โหลด checkin ที่เปิดอยู่ และตรวจสอบรหัส
       const checkInRef = collection(db, "classroom", selectedClass.id, "checkin");
       const checkinCollec = await getDocs(checkInRef);
 
@@ -155,7 +164,6 @@ const ShowClassScreen = ({ navigation }) => {
           const timeStr = now.toLocaleTimeString("en-GB", { hour12: false });
           const timestamp = now.getTime();
 
-          // บันทึกข้อมูลลง Firestore
           const studentDocRef = doc(
             db,
             "classroom",
@@ -193,26 +201,27 @@ const ShowClassScreen = ({ navigation }) => {
     } catch (error) {
       console.error("เกิดข้อผิดพลาด:", error);
       Alert.alert("ข้อผิดพลาด", error.message);
+    } finally {
+      setIsCheckingIn(false);
     }
   };
 
-  const checkCheckinStatus = async () => {
-    // Implementation pending
-  };
-
+  // Handle class selection for check-in
   const handleAttendance = (classItem) => {
     setSelectedClass(classItem);
     setModalVisible(true);
   };
-  
-  const filteredClasses = classes.filter(item => 
-    item.name.toLowerCase().includes(searchText.toLowerCase()) || 
+
+  // Filter classes based on search text
+  const filteredClasses = classes.filter(item =>
+    item.name.toLowerCase().includes(searchText.toLowerCase()) ||
     item.code.toLowerCase().includes(searchText.toLowerCase())
   );
-  
+
+  // Render class card
   const renderClassCard = ({ item }) => (
-    <LinearGradient 
-      colors={['#ffffff', '#f5f5f7']} 
+    <LinearGradient
+      colors={['#ffffff', '#f5f5f7']}
       style={styles.classCard}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
@@ -225,14 +234,14 @@ const ShowClassScreen = ({ navigation }) => {
           <FontAwesome5 name="book-open" size={12} color="#fff" />
         </View>
       </View>
-      
+
       <Text style={styles.className}>{item.name}</Text>
-      
+
       <View style={styles.classInfoRow}>
         <Ionicons name="location" size={16} color="#666" />
         <Text style={styles.roomText}>ห้อง {item.room || "ไม่ระบุ"}</Text>
       </View>
-      
+
       <View style={styles.actionButtonsContainer}>
         <TouchableOpacity
           style={[styles.actionButton, styles.checkinButton]}
@@ -258,7 +267,7 @@ const ShowClassScreen = ({ navigation }) => {
           style={styles.gradientOverlay}
         >
           <View style={styles.header}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
@@ -266,7 +275,7 @@ const ShowClassScreen = ({ navigation }) => {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>รายวิชาของฉัน</Text>
           </View>
-          
+
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
             <TextInput
@@ -282,7 +291,7 @@ const ShowClassScreen = ({ navigation }) => {
               </TouchableOpacity>
             )}
           </View>
-          
+
           <View style={styles.contentContainer}>
             {loading ? (
               <View style={styles.loadingContainer}>
@@ -296,16 +305,24 @@ const ShowClassScreen = ({ navigation }) => {
                 renderItem={renderClassCard}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.listContainer}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={fetchClasses}
+                    colors={["#4f86f7"]}
+                    tintColor="#4f86f7"
+                  />
+                }
               />
             ) : (
               <View style={styles.emptyContainer}>
                 <MaterialIcons name="class" size={60} color="rgba(255,255,255,0.5)" />
                 <Text style={styles.emptyText}>
-                  {searchText.length > 0 
-                    ? "ไม่พบรายวิชาที่ค้นหา" 
+                  {searchText.length > 0
+                    ? "ไม่พบรายวิชาที่ค้นหา"
                     : "ยังไม่มีรายวิชาที่เรียน"}
                 </Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.refreshButton}
                   onPress={fetchClasses}
                 >
@@ -316,7 +333,7 @@ const ShowClassScreen = ({ navigation }) => {
           </View>
         </LinearGradient>
       </ImageBackground>
-      
+
       {/* Check-in Modal */}
       <Modal
         visible={modalVisible}
@@ -335,14 +352,14 @@ const ShowClassScreen = ({ navigation }) => {
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-            
+
             {selectedClass && (
               <View style={styles.selectedClassInfo}>
                 <Text style={styles.selectedClassName}>{selectedClass.name}</Text>
                 <Text style={styles.selectedClassCode}>{selectedClass.code}</Text>
               </View>
             )}
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>รหัสเช็คชื่อ</Text>
               <TextInput
@@ -354,7 +371,7 @@ const ShowClassScreen = ({ navigation }) => {
                 autoFocus={true}
               />
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>ถามคำถาม</Text>
               <TextInput
@@ -366,7 +383,7 @@ const ShowClassScreen = ({ navigation }) => {
                 numberOfLines={3}
               />
             </View>
-            
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
@@ -374,30 +391,37 @@ const ShowClassScreen = ({ navigation }) => {
               >
                 <Text style={styles.cancelButtonText}>ยกเลิก</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.modalButton, styles.confirmButton]}
                 onPress={markAttendance}
+                disabled={isCheckingIn}
               >
-                <Text style={styles.confirmButtonText}>ยืนยันเช็คชื่อ</Text>
+                {isCheckingIn ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>ยืนยันเช็คชื่อ</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-      
+
       {/* Success Notification */}
       {showSuccess && (
-        <Animated.View 
+        <Animated.View
           style={[
             styles.successNotification,
-            { 
-              opacity: successAnimation, 
-              transform: [{ translateY: successAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-50, 0]
-              })}]
-            }
+            {
+              opacity: successAnimation,
+              transform: [{
+                translateY: successAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-50, 0],
+                }),
+              }],
+            },
           ]}
         >
           <View style={styles.successContent}>
@@ -550,55 +574,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    color: "#fff",
     marginTop: 10,
     fontSize: 16,
+    color: "#fff",
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: 20,
   },
   emptyText: {
-    color: "#fff",
     fontSize: 18,
+    color: "rgba(255,255,255,0.7)",
     textAlign: "center",
-    marginTop: 20,
-    marginBottom: 30,
+    marginTop: 10,
   },
   refreshButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     backgroundColor: "rgba(255,255,255,0.2)",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
     borderRadius: 8,
   },
   refreshButtonText: {
+    fontSize: 16,
     color: "#fff",
     fontWeight: "500",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalContent: {
+    width: "90%",
     backgroundColor: "#fff",
     borderRadius: 16,
-    width: "85%",
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 20,
   },
   modalTitle: {
     fontSize: 20,
@@ -606,41 +626,35 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   closeButton: {
-    padding: 5,
+    padding: 8,
   },
   selectedClassInfo: {
-    backgroundColor: "#f5f5f7",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   selectedClassName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 4,
   },
   selectedClassCode: {
     fontSize: 14,
     color: "#666",
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#555",
-    marginBottom: 6,
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
+    backgroundColor: "#f5f5f7",
+    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    backgroundColor: "#f9f9f9",
+    color: "#333",
   },
   textArea: {
     height: 80,
@@ -652,39 +666,43 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   modalButton: {
-    paddingVertical: 12,
-    borderRadius: 10,
     flex: 0.48,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: "center",
     alignItems: "center",
   },
   cancelButton: {
-    backgroundColor: "#f2f2f2",
+    backgroundColor: "#f5f5f7",
   },
   cancelButtonText: {
-    color: "#666",
     fontSize: 16,
+    color: "#666",
     fontWeight: "500",
   },
   confirmButton: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#4f86f7",
   },
   confirmButtonText: {
-    color: "#fff",
     fontSize: 16,
+    color: "#fff",
     fontWeight: "500",
   },
   successNotification: {
     position: "absolute",
-    top: 90,
-    alignSelf: "center",
+    top: 50,
+    left: 20,
+    right: 20,
     backgroundColor: "#4CAF50",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 30,
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
     elevation: 5,
   },
   successContent: {
@@ -692,10 +710,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   successText: {
-    color: "#fff",
-    marginLeft: 8,
     fontSize: 16,
+    color: "#fff",
     fontWeight: "500",
+    marginLeft: 8,
   },
 });
 
