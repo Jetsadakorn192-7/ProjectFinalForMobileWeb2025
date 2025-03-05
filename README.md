@@ -5,11 +5,12 @@
 
 ## สมาชิกกลุ่ม
 
-| Student ID       | Name                          |
-|-------------------|-------------------------------|
-| 653380192-7      | นายเจษฎากร ดุจพายัพ sec.2      |
-| 653380193-5      | นายชาญณรงค์ นิลแก้ว sec.2         |
-| 653380199-3      | นายแทนไทย อรหันตา sec.2     |
+
+| Student ID       | Name                          | Role                     |
+|-------------------|-------------------------------|--------------------------|
+| 653380192-7      | นายเจษฎากร ดุจพายัพ (sec.2)  | Mobile Application       |
+| 653380193-5      | นายชาญณรงค์ นิลแก้ว (sec.2)   | เอกสาร        |
+| 653380199-3      | นายแทนไทย อรหันตา (sec.2)     | Web Application   |
 
 **Web Application สำหรับอาจารย์**  :   [Click here](https://jetsadakorn192-7.github.io/ProjectFinalForMobileWeb2025/?fbclid=IwY2xjawIv7x5leHRuA2FlbQIxMAABHZWijwm31x5OAwroxsb5L40QoIdlImLeHq8gFvPZWeN3Fibum4TuQ3uvqA_aem_RwYKFIIylwSlKyheZQr0jw) 
 
