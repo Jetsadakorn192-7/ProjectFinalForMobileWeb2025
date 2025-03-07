@@ -107,11 +107,6 @@ const RegisterScreen = ({ navigation }) => {
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
             <View style={styles.headerContainer}>
-              {/* <Image 
-                source={require('./assets/logo.png')} // Replace with your app logo
-                style={styles.logo}
-                resizeMode="contain"
-              /> */}
               <Text style={styles.title}>Create Account</Text>
               <Text style={styles.subtitle}>Sign up to get started with our services</Text>
             </View>

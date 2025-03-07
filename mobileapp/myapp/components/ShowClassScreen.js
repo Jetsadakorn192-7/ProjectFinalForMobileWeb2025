@@ -111,12 +111,12 @@ const ShowClassScreen = ({ navigation }) => {
   // Handle check-in process
   const markAttendance = async () => {
     if (!selectedClass || !checkinCode) {
-      Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสเช็คชื่อ");
+      Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสนักศึกษา");
       return;
     }
 
-    if (!/^\d{6}$/.test(checkinCode)) {
-      Alert.alert("รหัสไม่ถูกต้อง", "รหัสเช็คชื่อต้องเป็นตัวเลข 6 หลัก");
+    if (!/^\d{10}$/.test(checkinCode)) {
+      Alert.alert("รหัสไม่ถูกต้อง", "รหัสนักศึกษา10ตัวไม่ต้องใส่ขีด");
       return;
     }
 
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   modalButtons: {
-    backgroundColor: '#3498db', // Example color
+    backgroundColor: '#3498db',
     padding: 10,
     borderRadius: 5,
     alignItems: 'center',
@@ -737,7 +737,7 @@ const styles = StyleSheet.create({
     flex: 0.48,
   },
   confirmButtons: {
-    color: '#fff', // Make sure the text color contrasts with the background
+    color: '#fff',
     fontSize: 18,
   },
 
