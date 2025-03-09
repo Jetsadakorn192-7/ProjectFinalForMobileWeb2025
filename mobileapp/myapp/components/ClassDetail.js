@@ -146,7 +146,7 @@ const ClassDetail = ({ navigation, route }) => {
     try {
       const remarkRef = doc(db, `classroom/${cid}/checkin/${cno}/students/${uid}`);
       await setDoc(remarkRef, { remark }, { merge: true });
-      Alert.alert("✅ Remark saved successfully!");
+      Alert.alert("✅ ถามคำถามสำเร็จ!");
       setRemark(""); // Clear the remark field after saving
     } catch (error) {
       Alert.alert("❌ Failed to save", error.message);
@@ -210,11 +210,11 @@ const ClassDetail = ({ navigation, route }) => {
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Ionicons name="create-outline" size={24} color="#053C5E" />
-                <Text style={styles.cardTitle}>Add Remark</Text>
+                <Text style={styles.cardTitle}>เพิ่มคำถาม</Text>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="Enter your remark here"
+                placeholder="เพิ่มคำถามตรงนี้"
                 value={remark}
                 onChangeText={setRemark}
                 multiline
@@ -224,7 +224,7 @@ const ClassDetail = ({ navigation, route }) => {
                 onPress={handleSaveRemark}
                 disabled={!remark}
               >
-                <Text style={styles.buttonText}>Save Remark</Text>
+                <Text style={styles.buttonText}>บันทึก คำถาม</Text>
               </TouchableOpacity>
             </View>
 

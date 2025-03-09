@@ -13,6 +13,7 @@ import {
   ImageBackground,
   Animated,
   RefreshControl,
+  ScrollView,
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
@@ -108,109 +109,111 @@ const ShowClassScreen = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
-  // Handle check-in process
-  const markAttendance = async () => {
-    if (!selectedClass || !checkinCode) {
-      Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสนักศึกษา");
-      return;
-    }
-
-    if (!/^\d{10}$/.test(checkinCode)) {
-      Alert.alert("รหัสไม่ถูกต้อง", "รหัสนักศึกษา10ตัวไม่ต้องใส่ขีด");
-      return;
-    }
-
-    setIsCheckingIn(true);
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert("กรุณาเข้าสู่ระบบ", "ไม่พบข้อมูลผู้ใช้");
-        setModalVisible(false);
-        return;
-      }
-
-      const studentRef = doc(db, "Student", user.uid);
-      const studentSnap = await getDoc(studentRef);
-
-      if (!studentSnap.exists()) {
-        Alert.alert("ไม่พบข้อมูลนักเรียน");
-        setModalVisible(false);
-        return;
-      }
-
-      const studentData = studentSnap.data();
-      const sid = studentData.studentId || "N/A";
-      const username = studentData.username || "ไม่มีชื่อ";
-
-      const checkInRef = collection(db, "classroom", selectedClass.id, "checkin");
-      const checkinCollec = await getDocs(checkInRef);
-
-      if (checkinCollec.empty) {
-        Alert.alert("ไม่มีข้อมูลการเช็คชื่อ");
-        setModalVisible(false);
-        return;
-      }
-
-      let checkinMatched = false;
-
-      for (const docSnap of checkinCollec.docs) {
-        const docData = docSnap.data();
-
-        if (docData.status === 1 && docData.checkinCode === checkinCode) {
-          checkinMatched = true;
-
-          const now = new Date();
-          const dateStr = now.toISOString().split("T")[0];
-          const timeStr = now.toLocaleTimeString("en-GB", { hour12: false });
-          const timestamp = now.getTime();
-
-          const studentDocRef = doc(
-            db,
-            "classroom",
-            selectedClass.id,
-            "checkin",
-            docSnap.id,
-            "Students",
-            user.uid
-          );
-
-          await setDoc(
-            studentDocRef,
-            {
-              studentId: sid,
-              username: username,
-              date: dateStr,
-              time: timeStr,
-              timestamp: timestamp,
-              remark: remark || "ไม่มีหมายเหตุ",
-            },
-            { merge: true }
-          );
-
-          setModalVisible(false);
-          setCheckinCode('');
-          setRemark('');
-          animateSuccess();
-          break;
-        }
-      }
-
-      if (!checkinMatched) {
-        Alert.alert("รหัสเช็คชื่อไม่ถูกต้อง", "รหัสเช็คชื่อไม่ถูกต้อง หรือเช็คชื่อปิดแล้ว");
-      }
-    } catch (error) {
-      console.error("เกิดข้อผิดพลาด:", error);
-      Alert.alert("ข้อผิดพลาด", error.message);
-    } finally {
-      setIsCheckingIn(false);
-    }
-  };
-
-  // Handle class selection for check-in
   const handleAttendance = (classItem) => {
     setSelectedClass(classItem);
     setModalVisible(true);
   };
+
+
+  // Handle check-in process
+  const markAttendance = async () => {
+    if (!selectedClass || !checkinCode) {
+        Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสนักศึกษา");
+        return;
+    }
+
+    if (!/^\d{10}$/.test(checkinCode)) {
+        Alert.alert("รหัสไม่ถูกต้อง", "รหัสนักศึกษา10ตัวไม่ต้องใส่ขีด");
+        return;
+    }
+
+    setIsCheckingIn(true);
+    try {
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert("กรุณาเข้าสู่ระบบ", "ไม่พบข้อมูลผู้ใช้");
+            setModalVisible(false);
+            return;
+        }
+
+        const studentRef = doc(db, "Student", user.uid);
+        const studentSnap = await getDoc(studentRef);
+
+        if (!studentSnap.exists()) {
+            Alert.alert("ไม่พบข้อมูลนักเรียน");
+            setModalVisible(false);
+            return;
+        }
+
+        const studentData = studentSnap.data();
+        const sid = studentData.studentId || "N/A";
+        const username = studentData.username || "ไม่มีชื่อ";
+
+        const checkInRef = collection(db, "classroom", selectedClass.id, "checkin");
+        const checkinCollec = await getDocs(checkInRef);
+
+        console.log("Check-in Collection:", checkinCollec);
+
+        if (checkinCollec.empty) {
+            Alert.alert("ไม่มีข้อมูลการเช็คชื่อ");
+            setModalVisible(false);
+            return;
+        }
+
+        let checkinMatched = false;
+
+        for (const docSnap of checkinCollec.docs) {
+            const docData = docSnap.data();
+
+            if (docData.status === 1 && docData.checkinCode === checkinCode) {
+                checkinMatched = true;
+
+                const now = new Date();
+                const dateStr = now.toISOString().split("T")[0];
+                const timeStr = now.toLocaleTimeString("en-GB", { hour12: false });
+                const timestamp = now.getTime();
+
+                const studentDocRef = doc(
+                    db,
+                    "classroom",
+                    selectedClass.id,
+                    "checkin",
+                    docSnap.id,
+                    "Students",
+                    user.uid
+                );
+
+                await setDoc(
+                    studentDocRef,
+                    {
+                        studentId: sid,
+                        username: username,
+                        date: dateStr,
+                        time: timeStr,
+                        timestamp: timestamp,
+                        remark: remark || "ไม่มีหมายเหตุ",
+                    },
+                    { merge: true }
+                );
+
+                setModalVisible(false);
+                setCheckinCode('');
+                setRemark('');
+                animateSuccess();
+                break;
+            }
+        }
+
+        if (!checkinMatched) {
+            Alert.alert("รหัสเช็คชื่อไม่ถูกต้อง", "รหัสเช็คชื่อไม่ถูกต้อง หรือเช็คชื่อปิดแล้ว");
+        }
+    } catch (error) {
+        console.error("เกิดข้อผิดพลาด:", error);
+        Alert.alert("ข้อผิดพลาด", error.message);
+    } finally {
+        setIsCheckingIn(false);
+    }
+};
 
   // Filter classes based on search text
   const filteredClasses = classes.filter(item =>
@@ -372,50 +375,52 @@ const ShowClassScreen = ({ navigation }) => {
               </View>
             )}
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>รหัสเช็คชื่อ</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="กรอกรหัสนักศึกษา"
-                value={checkinCode}
-                onChangeText={setCheckinCode}
-                keyboardType="number-pad"
-                autoFocus={true}
-              />
-            </View>
+            <ScrollView style={styles.modalScrollView}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>รหัสเช็คชื่อ</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="กรอกรหัสนักศึกษา"
+                  value={checkinCode}
+                  onChangeText={setCheckinCode}
+                  keyboardType="number-pad"
+                  autoFocus={true}
+                />
+              </View>
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>หมายเหตุ (ถ้ามี)</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder=""
-                value={remark}
-                onChangeText={setRemark}
-                multiline={true}
-                numberOfLines={3}
-              />
-            </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>หมายเหตุ (ถ้ามี)</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder=""
+                  value={remark}
+                  onChangeText={setRemark}
+                  multiline={true}
+                  numberOfLines={3}
+                />
+              </View>
+            
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>ยกเลิก</Text>
+                </TouchableOpacity>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>ยกเลิก</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={markAttendance}
-                disabled={isCheckingIn}
-              >
-                {isCheckingIn ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>ยืนยันเช็คชื่อ</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={markAttendance}
+                  disabled={isCheckingIn}
+                >
+                  {isCheckingIn ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>ยืนยันเช็คชื่อ</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -625,6 +630,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 20,
+    maxHeight: '80%', // Limit the height of modal content
   },
   modalHeader: {
     flexDirection: "row",
@@ -675,7 +681,8 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: 20,
+    marginBottom: 20, // Add bottom margin to ensure buttons are visible
   },
   modalButton: {
     flex: 0.48,
@@ -739,6 +746,9 @@ const styles = StyleSheet.create({
   confirmButtons: {
     color: '#fff',
     fontSize: 18,
+  },
+  modalScrollView: {
+    maxHeight: '80%',
   },
 
 });

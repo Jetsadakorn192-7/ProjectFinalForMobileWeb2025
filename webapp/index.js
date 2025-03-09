@@ -14,10 +14,28 @@ const db = firebase.firestore();
 
 const handleCheckIn = async (studentId) => {
     try {
-      // เช็คชื่อใน Firestore
       const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+  
       const date = new Date().toISOString().split('T')[0]; // ใช้วันที่ปัจจุบัน
   
+      // ตรวจสอบว่ามีการเช็คชื่อซ้ำหรือไม่
+      const querySnapshot = await getDocs(
+        query(
+          collection(db, 'attendance'),
+          where('classId', '==', classId),
+          where('studentId', '==', studentId),
+          where('date', '==', date)
+        )
+      );
+  
+      if (!querySnapshot.empty) {
+        throw new Error('Student already checked in today');
+      }
+  
+      // เพิ่มข้อมูลการเช็คชื่อ
       await addDoc(collection(db, 'attendance'), {
         classId: classId,
         studentId: studentId,
@@ -35,8 +53,60 @@ const handleCheckIn = async (studentId) => {
       console.log('Checked in successfully!');
     } catch (error) {
       console.error('Error checking in:', error);
+      alert(error.message); // แสดงข้อความผิดพลาดให้ผู้ใช้ทราบ
     }
   };
+  
+  const checkinCode = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert("ข้อผิดพลาด", "กรุณาเข้าสู่ระบบก่อนเช็คชื่อ");
+        return;
+      }
+  
+      const studentRef = doc(db, "Students", user.uid);
+      const studentSnap = await getDoc(studentRef);
+  
+      if (!studentSnap.exists()) {
+        Alert.alert("ข้อผิดพลาด", "ไม่พบนักเรียนในระบบ");
+        return;
+      }
+  
+      const studentData = studentSnap.data();
+      const studentId = studentData.studentId || "N/A";
+      const studentName = studentData.name || "ไม่มีชื่อ";
+      
+      // ตรวจสอบว่ามีการเช็คชื่อไปแล้ววันนี้หรือไม่
+      const date = new Date().toISOString().split("T")[0];
+      const attendanceRef = collection(db, "attendance");
+      const q = query(
+        attendanceRef,
+        where("studentId", "==", studentId),
+        where("date", "==", date)
+      );
+  
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        Alert.alert("ข้อผิดพลาด", "คุณเช็คชื่อไปแล้ววันนี้");
+        return;
+      }
+  
+      // เพิ่มข้อมูลการเช็คชื่อเข้า Firestore
+      await addDoc(attendanceRef, {
+        studentId: studentId,
+        studentName: studentName,
+        date: date,
+        timestamp: new Date(),
+        status: "checked-in",
+      });
+  
+      Alert.alert("สำเร็จ", "เช็คชื่อสำเร็จ!");
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาด:", error);
+      Alert.alert("ข้อผิดพลาด", error.message);
+    }
+  };  
   
 function LandingPage({ onLogin }) {
     return (
@@ -177,32 +247,56 @@ function EditProfile({ user, app }) {
 }
 
 function AllCourses({ data, app }) {
-    console.log("Data received:", data);
     return (
         <Container>
             <Row>
                 {data.length > 0 ? (
                     data.map((c) => (
                         <Col key={c.id} md={4} className="mb-4">
-                            <Card className="h-100 shadow-sm">
-                                <Card.Img variant="top" src={c.info.photo} alt="Subject" />
+                            <Card className="h-100 shadow-sm" style={{ border: "none", borderRadius: "10px" }}>
+                                <Card.Img variant="top" src={c.info.photo} alt="Subject" style={{ borderTopLeftRadius: "10px", borderTopRightRadius: "10px" }} />
                                 <Card.Body>
-                                    <Card.Title>{c.info.name}</Card.Title>
+                                    <Card.Title style={{ color: "#2c3e50", fontWeight: "bold" }}>{c.info.name}</Card.Title>
                                     <Card.Text>
                                         <strong>รหัสวิชา:</strong> {c.info.code} <br />
                                         <strong>ห้องเรียน:</strong> {c.info.room}
                                     </Card.Text>
                                 </Card.Body>
-                                <Card.Footer className="text-center">
-                                    <Button variant="warning" onClick={() => app.manageCourse(c)} className="me-2">จัดการ</Button>
-                                    <Button variant="danger" onClick={() => app.delete(c)}>ลบ</Button>
+                                <Card.Footer className="text-center" style={{ backgroundColor: "white", borderTop: "none" }}>
+                                    <Button 
+                                        variant="warning" 
+                                        onClick={() => app.manageCourse(c)} 
+                                        className="me-2"
+                                        style={{ 
+                                            backgroundColor: "#f1c40f", 
+                                            border: "none", 
+                                            padding: "8px 16px", 
+                                            borderRadius: "5px"
+                                        }}
+                                    >
+                                        <i className="fas fa-cog" style={{ marginRight: "8px" }}></i>
+                                        จัดการ
+                                    </Button>
+                                    <Button 
+                                        variant="danger" 
+                                        onClick={() => app.delete(c)}
+                                        style={{ 
+                                            backgroundColor: "#e74c3c", 
+                                            border: "none", 
+                                            padding: "8px 16px", 
+                                            borderRadius: "5px"
+                                        }}
+                                    >
+                                        <i className="fas fa-trash" style={{ marginRight: "8px" }}></i>
+                                        ลบ
+                                    </Button>
                                 </Card.Footer>
                             </Card>
                         </Col>
                     ))
                 ) : (
                     <Col className="text-center">
-                        <p>ไม่มีข้อมูลรายวิชา</p>
+                        <p style={{ color: "#7f8c8d" }}>ไม่มีข้อมูลรายวิชา</p>
                     </Col>
                 )}
             </Row>
@@ -564,14 +658,14 @@ function StudentAssignmentView({ assignment, classId, user }) {
             <img src={qrUrl} alt="QR Code" />
         </div>
     ); 
-    }
+}
 
 
 function StudentList({ cid }) {
     const [students, setStudents] = React.useState([]);
 
     React.useEffect(() => {
-        db.collection(`classroom/${cid}/students`).get().then((querySnapshot) => {
+        db.collection(`classroom/${cid}/Student`).get().then((querySnapshot) => {
             setStudents(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
     }, [cid]);
@@ -581,20 +675,20 @@ function StudentList({ cid }) {
             <thead>
                 <tr>
                     <th>ลำดับ</th>
-                    <th>รหัส</th>
+                    <th>รหัสนักศึกษา</th>
                     <th>ชื่อ</th>
-                    <th>รูปภาพ</th>
-                    <th>สถานะ</th>
+                    <th>เบอร์โทร</th>
+                    <th>Email</th>
                 </tr>
             </thead>
             <tbody>
                 {students.map((s, index) => (
                     <tr key={s.id}>
                         <td>{index + 1}</td>
-                        <td>{s.id}</td>
-                        <td>{s.name}</td>
-                        <td><img src={s.photo} alt="Student" width="50" /></td>
-                        <td>{s.status}</td>
+                        <td>{s.studentId}</td>
+                        <td>{s.username}</td>
+                        <td>{s.phoneNumber}</td>
+                        <td>{s.email}</td>
                     </tr>
                 ))}
             </tbody>
@@ -709,6 +803,7 @@ function AttendanceDetails({ cid, attendanceId }) {
                         <th>รหัสนักศึกษา</th>
                         <th>ชื่อ</th>
                         <th>เวลาที่เช็คชื่อ</th>
+                        <th>หมายเหตุ</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -718,6 +813,7 @@ function AttendanceDetails({ cid, attendanceId }) {
                             <td>{attendee.studentId}</td>
                             <td>{attendee.studentName}</td>
                             <td>{attendee.timestamp?.toDate().toLocaleString()}</td>
+                            <td>{attendee.remark}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -864,7 +960,7 @@ function ClassQuestions({ cid, user }) {
                 <h4>คำถามในห้องเรียน</h4>
                 <div>
                     <Button variant="primary" onClick={askNewQuestion} className="me-2">ถามคำถามใหม่</Button>
-                    <Button variant="secondary" onClick={debugDatabase}>ตรวจสอบฐานข้อมูล</Button>
+                    {/* <Button variant="secondary" onClick={debugDatabase}>ตรวจสอบฐานข้อมูล</Button> */}
                 </div>
             </div>
             
@@ -974,25 +1070,34 @@ function ClassQuestions({ cid, user }) {
         </div>
     );
 }
+
 // ปุ่มบันทึกการเช็คชื่อ
 const handleSaveCheckIn = async (cid, cno) => {
     try {
-        const studentsRef = db.collection(`classroom/${cid}/checkin/${cno}/students`);
-        const scoresRef = db.collection(`classroom/${cid}/checkin/${cno}/scores`);
-        const snapshot = await studentsRef.get();
-
-        snapshot.forEach(doc => {
-            scoresRef.doc(doc.id).set({
-                ...doc.data(),
-                status: 1,
-            });
-        });
-
-        alert("บันทึกการเช็คชื่อสำเร็จ");
+      if (!cid || !cno) {
+        throw new Error('Invalid class ID or check-in number');
+      }
+  
+      const studentsRef = collection(db, `classroom/${cid}/checkin/${cno}/students`);
+      const scoresRef = collection(db, `classroom/${cid}/checkin/${cno}/scores`);
+      const snapshot = await getDocs(studentsRef);
+  
+      snapshot.forEach((doc) => {
+        if (doc.exists()) {
+          const studentData = doc.data();
+          addDoc(scoresRef, {
+            ...studentData,
+            status: 1, // 1 = เช็คชื่อสำเร็จ
+          });
+        }
+      });
+  
+      alert('บันทึกการเช็คชื่อสำเร็จ');
     } catch (error) {
-        console.error("Error saving check-in:", error);
+      console.error('Error saving check-in:', error);
+      alert('เกิดข้อผิดพลาดในการบันทึกการเช็คชื่อ');
     }
-};
+  };
 
 // ปุ่มแสดงคะแนน
 function ShowScores({ cid, cno }) {
@@ -1054,60 +1159,97 @@ function ShowScores({ cid, cno }) {
 
 // ปุ่มลบรายชื่อนักศึกษา
 const handleDeleteStudent = async (cid, cno, studentId) => {
-    if (!window.confirm("ต้องการลบรายชื่อนักศึกษานี้ใช่หรือไม่?")) return;
-
     try {
-        await db.collection(`classroom/${cid}/checkin/${cno}/students`).doc(studentId).delete();
-        alert("ลบรายชื่อสำเร็จ");
+      await deleteDoc(doc(db, `classroom/${cid}/checkin/${cno}/students`, studentId));
+      alert('ลบนักศึกษาสำเร็จ');
     } catch (error) {
-        console.error("Error deleting student:", error);
+      console.error('Error deleting student:', error);
+      alert('เกิดข้อผิดพลาดในการลบนักศึกษา');
     }
-};
+  };
 
 // ปุ่มแสดงรายชื่อนักศึกษาที่เช็คชื่อ
 function StudentCheckInList({ cid, cno }) {
     const [students, setStudents] = React.useState([]);
-
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
+  
     React.useEffect(() => {
-        const unsubscribe = db.collection(`classroom/${cid}/checkin/${cno}/students`).onSnapshot(snapshot => {
-            setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        return () => unsubscribe();
+      if (!cid || !cno) {
+        setError('Invalid class ID or check-in number');
+        setLoading(false);
+        return;
+      }
+  
+      const unsubscribe = onSnapshot(
+        collection(db, `classroom/${cid}/checkin/${cno}/students`),
+        (snapshot) => {
+          const studentList = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setStudents(studentList);
+          setLoading(false);
+        },
+        (error) => {
+          setError('Failed to fetch student list');
+          setLoading(false);
+        }
+      );
+  
+      return () => unsubscribe();
     }, [cid, cno]);
-
+  
+    if (loading) {
+      return <div>Loading...</div>;
+    }
+  
+    if (error) {
+      return <div style={{ color: 'red' }}>{error}</div>;
+    }
+  
     return (
-        <div>
-            <h4>รายชื่อผู้เช็คชื่อ</h4>
-            <Table striped bordered hover>
-                <thead>
-                    <tr>
-                        <th>ลำดับ</th>
-                        <th>รหัส</th>
-                        <th>ชื่อ</th>
-                        <th>หมายเหตุ</th>
-                        <th>วันเวลา</th>
-                        <th>จัดการ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {students.map((s, index) => (
-                        <tr key={s.id}>
-                            <td>{index + 1}</td>
-                            <td>{s.id}</td>
-                            <td>{s.name}</td>
-                            <td>{s.remark || ""}</td>
-                            <td>{s.timestamp?.toDate().toLocaleString()}</td>
-                            <td>
-                                <Button variant="danger" onClick={() => handleDeleteStudent(cid, cno, s.id)}>ลบ</Button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </Table>
-        </div>
+      <div>
+        <h4>รายชื่อผู้เช็คชื่อ</h4>
+        <Table striped bordered hover>
+          <thead>
+            <tr>
+              <th>ลำดับ</th>
+              <th>รหัส</th>
+              <th>ชื่อ</th>
+              <th>หมายเหตุ</th>
+              <th>วันเวลา</th>
+              <th>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.length > 0 ? (
+              students.map((s, index) => (
+                <tr key={s.id}>
+                  <td>{index + 1}</td>
+                  <td>{s.id}</td>
+                  <td>{s.name}</td>
+                  <td>{s.remark || ''}</td>
+                  <td>{s.timestamp?.toDate().toLocaleString()}</td>
+                  <td>
+                    <Button variant="danger" onClick={() => handleDeleteStudent(cid, cno, s.id)}>
+                      ลบ
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center' }}>
+                  ไม่มีข้อมูลการเช็คชื่อ
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+      </div>
     );
-}
-
+  }
 class App extends React.Component {
     state = {
         scene: "dashboard",
@@ -1311,41 +1453,243 @@ componentDidMount() {
         });
     }   
 
-    render() {
-        if (!this.state.user) return <LandingPage onLogin={this.google_login} />;
-        return (
-            <div style={{ display: "flex", height: "100vh" }}>
-                
-                {/* Sidebar Profile */}
-                <div style={{
-                    width: "250px", 
-                    backgroundColor: "#75464A", 
-                    padding: "20px", 
-                    borderRight: "1px solid #ddd",
-                    boxShadow: "2px 0px 5px rgba(0, 0, 0, 0.1)",
+   render() {
+    // ถ้ายังไม่ได้ล็อกอิน ให้แสดงหน้า LandingPage
+    if (!this.state.user) {
+        return <LandingPage onLogin={this.google_login} />;
+    }
+
+    return (
+        <>
+            {/* Custom CSS for animations and effects */}
+            <style>
+                {`
+                    @keyframes fadeIn {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
+                    }
+                    
+                    .profile-img {
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .profile-img:hover {
+                        transform: scale(1.1);
+                        box-shadow: 0 0 20px rgba(52, 152, 219, 0.7);
+                    }
+                    
+                    .sidebar-button {
+                        transition: all 0.2s ease;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .sidebar-button:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+                    }
+                    
+                    .sidebar-button::after {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(255, 255, 255, 0.1);
+                        transform: translateX(-100%);
+                        transition: transform 0.3s ease;
+                    }
+                    
+                    .sidebar-button:hover::after {
+                        transform: translateX(0);
+                    }
+                    
+                    .content-container {
+                        animation: fadeIn 0.5s ease;
+                    }
+                    
+                    .user-name {
+                        position: relative;
+                    }
+                    
+                    .user-name::after {
+                        content: '';
+                        position: absolute;
+                        bottom: -5px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        width: 0;
+                        height: 2px;
+                        background-color: #3498db;
+                        transition: width 0.3s ease;
+                    }
+                    
+                    .user-name:hover::after {
+                        width: 70%;
+                    }
+                `}
+            </style>
+
+            {/* Sidebar */}
+            <div
+                style={{
+                    width: "250px",
+                    backgroundColor: "#2c3e50",
+                    padding: "20px",
                     height: "100vh",
                     position: "fixed",
                     left: 0,
-                    top: 0
-                }}>
-                    <img src={this.state.user.photoURL} alt="Profile" width="100" className="rounded-circle" />
-                    <h4 style={{ marginTop: "15px" }}>{this.state.user.displayName}</h4>
-                    <p style={{ color: "#777", fontSize: "14px" }}>{this.state.user.email}</p>
-    
-                    <Button variant="primary" onClick={() => this.setState({ scene: "addSubject" })} className="w-100 mb-2">
+                    top: 0,
+                    boxShadow: "2px 0px 10px rgba(0, 0, 0, 0.3)",
+                    color: "#ecf0f1",
+                    transition: "all 0.3s ease",
+                }}
+                className="content-container"
+            >
+                {/* Profile Section */}
+                <div style={{ textAlign: "center" }}>
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                        <img
+                            src={this.state.user.photoURL}
+                            alt="Profile"
+                            width="80"
+                            className="rounded-circle profile-img"
+                            style={{ 
+                                border: "3px solid #3498db",
+                                cursor: "pointer"
+                            }}
+                        />
+                        <div 
+                            style={{ 
+                                position: "absolute", 
+                                bottom: "5px", 
+                                right: "5px", 
+                                background: "#2ecc71", 
+                                width: "15px", 
+                                height: "15px", 
+                                borderRadius: "50%", 
+                                border: "2px solid #2c3e50" 
+                            }}
+                        />
+                    </div>
+                    <h4 style={{ marginTop: "15px", marginBottom: "5px" }} className="user-name">
+                        {this.state.user.displayName}
+                    </h4>
+                    <p style={{ 
+                        color: "#bdc3c7", 
+                        fontSize: "14px", 
+                        background: "rgba(0,0,0,0.2)", 
+                        padding: "3px 10px", 
+                        borderRadius: "15px", 
+                        display: "inline-block" 
+                    }}>
+                        {this.state.user.email}
+                    </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ marginTop: "30px" }}>
+                    <Button
+                        variant="primary"
+                        onClick={() => this.setState({ scene: "addSubject" })}
+                        className="w-100 mb-3 sidebar-button"
+                        style={{
+                            backgroundColor: "#3498db",
+                            border: "none",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-start",
+                            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                        }}
+                    >
+                        <i className="fas fa-plus-circle" style={{ marginRight: "15px", fontSize: "18px" }}></i>
                         เพิ่มวิชา
                     </Button>
-                    <Button variant="secondary" onClick={() => this.setState({ scene: "editProfile" })} className="w-100 mb-2">
+
+                    <Button
+                        variant="secondary"
+                        onClick={() => this.setState({ scene: "editProfile" })}
+                        className="w-100 mb-3 sidebar-button"
+                        style={{
+                            backgroundColor: "#34495e",
+                            border: "none",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-start",
+                            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                        }}
+                    >
+                        <i className="fas fa-user-edit" style={{ marginRight: "15px", fontSize: "18px" }}></i>
                         แก้ไขโปรไฟล์
                     </Button>
-                    <Button variant="danger" onClick={this.google_logout} className="w-100 mb-2">
+
+                    <Button
+                        variant="danger"
+                        onClick={this.google_logout}
+                        className="w-100 mb-3 sidebar-button"
+                        style={{
+                            backgroundColor: "#e74c3c",
+                            border: "none",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-start",
+                            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                        }}
+                    >
+                        <i className="fas fa-sign-out-alt" style={{ marginRight: "15px", fontSize: "18px" }}></i>
                         ออกจากระบบ
                     </Button>
-                    
                 </div>
-    
-                {/* Main Content */}
-                <div style={{ marginLeft: "250px", width: "100%", padding: "20px" }}>
+                
+                {/* Footer with the current time */}
+                <div style={{ 
+                    position: "absolute", 
+                    bottom: "20px", 
+                    left: "0",
+                    right: "0", 
+                    textAlign: "center", 
+                    fontSize: "12px",
+                    color: "#bdc3c7"
+                }}>
+                    <div style={{ 
+                        background: "rgba(0,0,0,0.2)", 
+                        padding: "8px",
+                        borderRadius: "5px",
+                        margin: "0 20px"
+                    }}>
+                        <i className="fas fa-clock" style={{ marginRight: "5px" }}></i>
+                        {new Date().toLocaleTimeString()}
+                    </div>
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div
+                style={{
+                    marginLeft: "250px",
+                    width: "calc(100% - 250px)",
+                    padding: "30px",
+                    backgroundColor: "#f5f6fa",
+                    minHeight: "100vh",
+                    transition: "all 0.3s ease",
+                }}
+                className="content-container"
+            >
+                <div style={{ 
+                    background: "white", 
+                    borderRadius: "15px", 
+                    padding: "25px", 
+                    boxShadow: "0 5px 20px rgba(0, 0, 0, 0.05)",
+                    transition: "transform 0.3s ease",
+                }}>
+                    {/* Conditional Rendering Based on Scene */}
                     {this.state.scene === "addSubject" ? (
                         <AddSubject user={this.state.user} app={this} />
                     ) : this.state.scene === "editProfile" ? (
@@ -1353,12 +1697,34 @@ componentDidMount() {
                     ) : this.state.scene === "manageCourse" ? (
                         <ManageCourse course={this.state.currentCourse} app={this} />
                     ) : (
-                        <AllCourses data={this.state.courses} app={this} />
+                        <div>
+                            <h2 style={{ 
+                                color: "#2c3e50", 
+                                marginBottom: "25px",
+                                position: "relative",
+                                display: "inline-block",
+                                paddingBottom: "10px"
+                            }}>
+                                <i className="fas fa-book" style={{ marginRight: "10px", color: "#3498db" }}></i>
+                                รายวิชาทั้งหมด
+                                <div style={{
+                                    position: "absolute",
+                                    bottom: 0,
+                                    left: 0,
+                                    width: "60px",
+                                    height: "3px",
+                                    background: "#3498db",
+                                    borderRadius: "2px"
+                                }}></div>
+                            </h2>
+                            <AllCourses data={this.state.courses} app={this} />
+                        </div>
                     )}
                 </div>
             </div>
-        );
-    }
+        </>
+    );
+}
 }
 const root = ReactDOM.createRoot(document.getElementById("webapp"));
 root.render(<App />); 
