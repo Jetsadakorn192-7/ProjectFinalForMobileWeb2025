@@ -12,266 +12,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const handleCheckIn = async (studentId, classId) => {
-  try {
-    const user = auth.currentUser;
-    if (!user) {
-      throw new Error('กรุณาเข้าสู่ระบบก่อนเช็คชื่อ');
-    }
-
-    const date = new Date().toISOString().split('T')[0]; // ใช้วันที่ปัจจุบัน
-
-    // ตรวจสอบว่ามีการเช็คชื่อซ้ำหรือไม่
-    const querySnapshot = await getDocs(
-      query(
-        collection(db, 'attendance'),
-        where('classId', '==', classId),
-        where('studentId', '==', studentId),
-        where('date', '==', date)
-      )
-    );
-
-    if (!querySnapshot.empty) {
-      throw new Error('คุณเช็คชื่อไปแล้ววันนี้');
-    }
-
-    // เพิ่มข้อมูลการเช็คชื่อ
-    await addDoc(collection(db, 'attendance'), {
-      classId: classId,
-      studentId: studentId,
-      date: date,
-      status: 'checked-in',
-      timestamp: new Date(),
-    });
-
-    // อัพเดตสถานะการเช็คชื่อในหน้าจอ
-    setCheckedIn((prevState) => ({
-      ...prevState,
-      [studentId]: 'checked-in',
-    }));
-
-    Alert.alert('สำเร็จ', 'เช็คชื่อสำเร็จ!');
-  } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการเช็คชื่อ:', error);
-    Alert.alert('ข้อผิดพลาด', error.message);
-  }
-};
-
-  // 1. ฟังก์ชันเช็คชื่อสำหรับนักศึกษา (รวม handleCheckIn และ checkinCode)
-  const studentCheckIn = async (classId, checkinSessionId) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        throw new Error('กรุณาเข้าสู่ระบบก่อนเช็คชื่อ');
-      }
-  
-      // ดึงข้อมูลนักศึกษา
-      const studentRef = doc(db, 'Students', user.uid);
-      const studentSnap = await getDoc(studentRef);
-  
-      if (!studentSnap.exists()) {
-        throw new Error('ไม่พบนักศึกษาในระบบ');
-      }
-  
-      const studentData = studentSnap.data();
-      const studentId = studentData.studentId || 'N/A';
-      const studentName = studentData.name || 'ไม่มีชื่อ';
-  
-      // ตรวจสอบว่า check-in session ยังเปิดอยู่หรือไม่
-      const checkInRef = doc(db, 'classroom', classId, 'checkin', checkinSessionId);
-      const checkInSnap = await getDoc(checkInRef);
-  
-      if (!checkInSnap.exists()) {
-        throw new Error('ไม่พบรายการเช็คชื่อ');
-      }
-  
-      const checkInData = checkInSnap.data();
-      if (checkInData.status !== 1) {
-        throw new Error('การเช็คชื่อสิ้นสุดแล้ว');
-      }
-  
-      // ตรวจสอบว่านักศึกษาเช็คชื่อไปแล้วหรือยัง
-      const studentsRef = collection(db, `classroom/${classId}/checkin/${checkinSessionId}/students`);
-      const studentQuery = query(studentsRef, where('studentId', '==', studentId));
-      const studentCheckSnapshot = await getDocs(studentQuery);
-  
-      if (!studentCheckSnapshot.empty) {
-        throw new Error('คุณเช็คชื่อไปแล้ว');
-      }
-  
-      // บันทึกข้อมูลการเช็คชื่อ
-      await addDoc(studentsRef, {
-        studentId,
-        studentName,
-        timestamp: new Date(),
-        status: 1, // 1 = เช็คชื่อแล้ว
-      });
-  
-      // อัปเดต UI
-      setCheckedIn((prevState) => ({
-        ...prevState,
-        [studentId]: 'checked-in',
-      }));
-  
-      Alert.alert('สำเร็จ', 'เช็คชื่อสำเร็จ!');
-      return true;
-    } catch (error) {
-      console.error('เกิดข้อผิดพลาดในการเช็คชื่อ:', error);
-      Alert.alert('ข้อผิดพลาด', error.message);
-      return false;
-    }
-  };
-
-// 2. ฟังก์ชันสำหรับบันทึกการเช็คชื่อโดยอาจารย์
-const handleSaveCheckIn = async (classId, checkinSessionId) => {
-  try {
-    if (!classId || !checkinSessionId) {
-      throw new Error('ข้อมูลคลาสหรือเซสชันเช็คชื่อไม่ถูกต้อง');
-    }
-
-    // อ้างอิงถึง collection ที่เก็บข้อมูลนักศึกษาที่เช็คชื่อ
-    const studentsRef = collection(db, `classroom/${classId}/checkin/${checkinSessionId}/students`);
-    const snapshot = await getDocs(studentsRef);
-
-    if (snapshot.empty) {
-      throw new Error('ไม่พบนักศึกษาที่เช็คชื่อในรายการนี้');
-    }
-
-    // อ้างอิงถึง collection ที่จะเก็บคะแนนการเช็คชื่อ
-    const scoresRef = collection(db, `classroom/${classId}/checkin/${checkinSessionId}/scores`);
-
-    // บันทึกค่าใน batch เพื่อประสิทธิภาพ
-    const batch = writeBatch(db);
-
-    snapshot.forEach((doc) => {
-      if (doc.exists()) {
-        const studentData = doc.data();
-        const scoreDocRef = doc(scoresRef); // สร้าง reference สำหรับ document ใหม่
-        batch.set(scoreDocRef, {
-          ...studentData,
-          score: 1, // ให้คะแนนเช็คชื่อ
-          recordedAt: new Date(),
-        });
-      }
-    });
-
-    // ปิดสถานะการเช็คชื่อ
-    const checkinRef = doc(db, `classroom/${classId}/checkin/${checkinSessionId}`);
-    batch.update(checkinRef, { status: 0 }); // 0 = ปิดการเช็คชื่อ
-
-    await batch.commit();
-
-    Alert.alert('สำเร็จ', 'บันทึกการเช็คชื่อเรียบร้อย');
-    return true;
-  } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการบันทึกการเช็คชื่อ:', error);
-    Alert.alert('ข้อผิดพลาด', error.message);
-    return false;
-  }
-};
-
-// 3. ฟังก์ชันสร้างเซสชันการเช็คชื่อสำหรับอาจารย์
-const createCheckInSession = async (classId, options = {}) => {
-  try {
-    // สร้างรหัสสำหรับการเช็คชื่อ (ถ้ามี)
-    const checkinCode = options.checkinCode || Math.floor(100000 + Math.random() * 900000).toString();
-    const duration = options.duration || 15; // นาทีที่เปิดให้เช็คชื่อ
-
-    // คำนวณเวลาสิ้นสุดจากระยะเวลาที่กำหนด
-    const now = new Date();
-    const endTime = new Date(now.getTime() + duration * 60000);
-
-    // สร้าง document ใหม่ในคอลเลคชัน checkin
-    const checkInRef = collection(db, 'classroom', classId, 'checkin');
-    const newCheckInRef = await addDoc(checkInRef, {
-      checkinCode,
-      date: now.toISOString().split('T')[0],
-      startTime: now.toLocaleTimeString('en-GB', { hour12: false }),
-      endTime: endTime.toLocaleTimeString('en-GB', { hour12: false }),
-      timestamp: now.getTime(),
-      status: 1, // 1 = active, 0 = inactive
-      createdBy: getAuth().currentUser.uid, // ใช้ getAuth() เพื่อดึงผู้ใช้ปัจจุบัน
-    });
-
-    Alert.alert('สำเร็จ', `เปิดให้เช็คชื่อแล้ว รหัสการเช็คชื่อ: ${checkinCode}`);
-
-    // ตั้งเวลาปิดการเช็คชื่ออัตโนมัติ
-    setTimeout(async () => {
-      try {
-        const docRef = doc(db, 'classroom', classId, 'checkin', newCheckInRef.id);
-        await updateDoc(docRef, { status: 0 });
-        console.log('ปิดเซสชันเช็คชื่ออัตโนมัติ');
-      } catch (err) {
-        console.error('เกิดข้อผิดพลาดในการปิดเซสชันอัตโนมัติ:', err);
-      }
-    }, duration * 60000);
-
-    return newCheckInRef.id;
-  } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการสร้างเซสชันเช็คชื่อ:', error);
-    Alert.alert('ข้อผิดพลาด', error.message);
-    return null;
-  }
-};
-const createSession = async () => {
-  const sessionId = await createCheckInSession(classId, options);
-  if (sessionId) {
-    console.log(`เซสชันเช็คชื่อถูกสร้างเรียบร้อย: รหัสเซสชัน - ${sessionId}`);
-  } else {
-    console.log('เกิดข้อผิดพลาดในการสร้างเซสชันเช็คชื่อ');
-  }
-};
-const checkinCode = async () => {
-  try {
-    const user = auth.currentUser;
-    if (!user) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณาเข้าสู่ระบบก่อนเช็คชื่อ');
-      return;
-    }
-
-    const studentRef = doc(db, 'Students', user.uid);
-    const studentSnap = await getDoc(studentRef);
-
-    if (!studentSnap.exists()) {
-      Alert.alert('ข้อผิดพลาด', 'ไม่พบนักเรียนในระบบ');
-      return;
-    }
-
-    const studentData = studentSnap.data();
-    const studentId = studentData.studentId || 'N/A';
-    const studentName = studentData.name || 'ไม่มีชื่อ';
-
-    // ตรวจสอบว่ามีการเช็คชื่อไปแล้ววันนี้หรือไม่
-    const date = new Date().toISOString().split('T')[0];
-    const attendanceRef = collection(db, 'attendance');
-    const q = query(
-      attendanceRef,
-      where('studentId', '==', studentId),
-      where('date', '==', date)
-    );
-
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      Alert.alert('ข้อผิดพลาด', 'คุณเช็คชื่อไปแล้ววันนี้');
-      return;
-    }
-
-    // เพิ่มข้อมูลการเช็คชื่อเข้า Firestore
-    await addDoc(attendanceRef, {
-      studentId: studentId,
-      studentName: studentName,
-      date: date,
-      timestamp: new Date(),
-      status: 'checked-in',
-    });
-
-    Alert.alert('สำเร็จ', 'เช็คชื่อสำเร็จ!');
-  } catch (error) {
-    console.error('เกิดข้อผิดพลาด:', error);
-    Alert.alert('ข้อผิดพลาด', error.message);
-  }
-};
-  
 function LandingPage({ onLogin }) {
     return (
         <div style={{
@@ -726,93 +466,8 @@ function CourseDetails({ course }) {
         </Container>
     );
 }
-function StudentAssignmentView({ assignment, classId, user }) {
-    const [answer, setAnswer] = React.useState("");
-    const [submitted, setSubmitted] = React.useState(false);
-    const [previousAnswer, setPreviousAnswer] = React.useState("");
-    
-    React.useEffect(() => {
-      // Check if student has already submitted an answer
-      db.collection(`classroom/${classId}/assignments/${assignment.id}/submissions`)
-        .doc(user.uid)
-        .get()
-        .then(doc => {
-          if (doc.exists) {
-            setPreviousAnswer(doc.data().answer);
-            setSubmitted(true);
-          }
-        });
-    }, [assignment.id, classId, user.uid]);
-    
-    const handleSubmit = () => {
-      if (!answer.trim()) {
-        alert("กรุณากรอกคำตอบก่อนส่ง");
-        return;
-      }
-      
-      db.collection(`classroom/${classId}/assignments/${assignment.id}/submissions`)
-        .doc(user.uid)
-        .set({
-          studentId: user.uid,
-          studentName: user.displayName || "ไม่ระบุชื่อ",
-          answer: answer.trim(),
-          submittedAt: firebase.firestore.FieldValue.serverTimestamp()
-        })
-        .then(() => {
-          alert("ส่งคำตอบเรียบร้อยแล้ว");
-          setSubmitted(true);
-          setPreviousAnswer(answer);
-        })
-        .catch(error => {
-          console.error("Error submitting answer:", error);
-          alert("เกิดข้อผิดพลาดในการส่งคำตอบ");
-        });
-    };
-    
-    return (
-      <Card className="mb-3">
-        <Card.Header>
-          <h5>{assignment.title}</h5>
-        </Card.Header>
-        <Card.Body>
-          <Card.Text>{assignment.description}</Card.Text>
-          
-          {submitted ? (
-            <div>
-              <Alert variant="success">
-                คุณได้ส่งคำตอบแล้ว
-              </Alert>
-              <h6>คำตอบของคุณ:</h6>
-              <p className="p-3 bg-light rounded">{previousAnswer}</p>
-              <Button 
-                variant="outline-primary" 
-                onClick={() => setSubmitted(false)}
-              >
-                แก้ไขคำตอบ
-              </Button>
-            </div>
-          ) : (
-            <Form>
-              <Form.Group className="mb-3">
-                <Form.Label>คำตอบของคุณ:</Form.Label>
-                <Form.Control 
-                  as="textarea" 
-                  rows={4} 
-                  value={answer} 
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder="พิมพ์คำตอบของคุณที่นี่..."
-                />
-              </Form.Group>
-              <Button variant="primary" onClick={handleSubmit}>
-                ส่งคำตอบ
-              </Button>
-            </Form>
-          )}
-        </Card.Body>
-      </Card>
-    );
-  }
-  function CourseQRCode({ cid }) {
+
+function CourseQRCode({ cid }) {
     const qrData = `myapp://join?subjectId=${cid}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`;
 
@@ -985,6 +640,7 @@ function AttendanceDetails({ cid, attendanceId }) {
         </div>
     );
 }
+
 const handleDeleteAttendance = async (cid, attendanceId) => {
     if (!window.confirm("ต้องการลบการเช็คชื่อนี้ใช่หรือไม่?")) return;
 
@@ -1385,6 +1041,7 @@ function StudentCheckInList({ cid, cno }) {
       </div>
     );
   }
+  
 class App extends React.Component {
     state = {
         scene: "dashboard",
@@ -1762,7 +1419,7 @@ componentDidMount() {
                         <i className="fas fa-user-edit" style={{ marginRight: "15px", fontSize: "18px" }}></i>
                         แก้ไขโปรไฟล์
                     </Button>
-
+                      
                     <Button
                         variant="danger"
                         onClick={this.google_logout}
