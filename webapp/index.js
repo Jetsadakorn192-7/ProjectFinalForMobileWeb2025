@@ -620,7 +620,7 @@ function AttendanceDetails({ cid, attendanceId }) {
                     <tr>
                         <th>ลำดับ</th>
                         <th>รหัสนักศึกษา</th>
-                        <th>ชื่อ</th>
+                        <th>ชื่อนักศึกษา</th>
                         <th>เวลาที่เช็คชื่อ</th>
                         <th>หมายเหตุ</th>
                     </tr>
@@ -960,87 +960,87 @@ const handleDeleteStudent = async (cid, cno, studentId) => {
   };
 
 // ปุ่มแสดงรายชื่อนักศึกษาที่เช็คชื่อ
-function StudentCheckInList({ cid, cno }) {
-    const [students, setStudents] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
-    const [error, setError] = React.useState(null);
+// function StudentCheckInList({ cid, cno }) {
+//     const [students, setStudents] = React.useState([]);
+//     const [loading, setLoading] = React.useState(true);
+//     const [error, setError] = React.useState(null);
   
-    React.useEffect(() => {
-      if (!cid || !cno) {
-        setError('Invalid class ID or check-in number');
-        setLoading(false);
-        return;
-      }
+//     React.useEffect(() => {
+//       if (!cid || !cno) {
+//         setError('Invalid class ID or check-in number');
+//         setLoading(false);
+//         return;
+//       }
   
-      const unsubscribe = onSnapshot(
-        collection(db, `classroom/${cid}/checkin/${cno}/students`),
-        (snapshot) => {
-          const studentList = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setStudents(studentList);
-          setLoading(false);
-        },
-        (error) => {
-          setError('Failed to fetch student list');
-          setLoading(false);
-        }
-      );
+//       const unsubscribe = onSnapshot(
+//         collection(db, `classroom/${cid}/checkin/${cno}/students`),
+//         (snapshot) => {
+//           const studentList = snapshot.docs.map((doc) => ({
+//             id: doc.id,
+//             ...doc.data(),
+//           }));
+//           setStudents(studentList);
+//           setLoading(false);
+//         },
+//         (error) => {
+//           setError('Failed to fetch student list');
+//           setLoading(false);
+//         }
+//       );
   
-      return () => unsubscribe();
-    }, [cid, cno]);
+//       return () => unsubscribe();
+//     }, [cid, cno]);
   
-    if (loading) {
-      return <div>Loading...</div>;
-    }
+//     if (loading) {
+//       return <div>Loading...</div>;
+//     }
   
-    if (error) {
-      return <div style={{ color: 'red' }}>{error}</div>;
-    }
+//     if (error) {
+//       return <div style={{ color: 'red' }}>{error}</div>;
+//     }
   
-    return (
-      <div>
-        <h4>รายชื่อผู้เช็คชื่อ</h4>
-        <Table striped bordered hover>
-          <thead>
-            <tr>
-              <th>ลำดับ</th>
-              <th>รหัส</th>
-              <th>ชื่อ</th>
-              <th>หมายเหตุ</th>
-              <th>วันเวลา</th>
-              <th>จัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.length > 0 ? (
-              students.map((s, index) => (
-                <tr key={s.id}>
-                  <td>{index + 1}</td>
-                  <td>{s.id}</td>
-                  <td>{s.name}</td>
-                  <td>{s.remark || ''}</td>
-                  <td>{s.timestamp?.toDate().toLocaleString()}</td>
-                  <td>
-                    <Button variant="danger" onClick={() => handleDeleteStudent(cid, cno, s.id)}>
-                      ลบ
-                    </Button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center' }}>
-                  ไม่มีข้อมูลการเช็คชื่อ
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </Table>
-      </div>
-    );
-  }
+//     return (
+//       <div>
+//         <h4>รายชื่อผู้เช็คชื่อ</h4>
+//         <Table striped bordered hover>
+//           <thead>
+//             <tr>
+//               <th>ลำดับ</th>
+//               <th>รหัสนักศึกษา</th>
+//               <th>ชื่อนักศึกษา</th>
+//               <th>หมายเหตุ</th>
+//               <th>วันเวลา</th>
+//               <th>จัดการ</th>
+//             </tr>
+//           </thead>
+//           <tbody>
+//             {students.length > 0 ? (
+//               students.map((s, index) => (
+//                 <tr key={s.id}>
+//                   <td>{index + 1}</td>
+//                   <td>{s.studentId}</td>
+//                   <td>{s.username}</td>
+//                   <td>{s.remark}</td>
+//                   <td>{s.time}</td>
+//                   <td>
+//                     <Button variant="danger" onClick={() => handleDeleteStudent(cid, cno, s.id)}>
+//                       ลบ
+//                     </Button>
+//                   </td>
+//                 </tr>
+//               ))
+//             ) : (
+//               <tr>
+//                 <td colSpan="6" style={{ textAlign: 'center' }}>
+//                   ไม่มีข้อมูลการเช็คชื่อ
+//                 </td>
+//               </tr>
+//             )}
+//           </tbody>
+//         </Table>
+//       </div>
+//     );
+//   }
   
 class App extends React.Component {
     state = {
