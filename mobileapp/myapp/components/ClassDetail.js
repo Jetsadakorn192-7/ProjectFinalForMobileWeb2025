@@ -142,7 +142,7 @@ const ClassDetail = ({ navigation, route }) => {
 
   // Function to save remarks
   const handleSaveRemark = async () => {
-    if (!remark) return Alert.alert("Please enter a remark");
+    if (!remark) return Alert.alert("เพิ่มคำถาม");
     try {
       const remarkRef = doc(db, `classroom/${cid}/checkin/${cno}/students/${uid}`);
       await setDoc(remarkRef, { remark }, { merge: true });
@@ -150,19 +150,6 @@ const ClassDetail = ({ navigation, route }) => {
       setRemark(""); // Clear the remark field after saving
     } catch (error) {
       Alert.alert("❌ Failed to save", error.message);
-    }
-  };
-
-  // Function to submit answer
-  const handleSubmitAnswer = async () => {
-    if (!answer) return Alert.alert("Please enter your answer");
-    try {
-      const answerRef = doc(db, `classroom/${cid}/question/${qid}/answers/${uid}`);
-      await setDoc(answerRef, { text: answer, timestamp: new Date() }, { merge: true });
-      Alert.alert("✅ Answer submitted successfully!");
-      setAnswer(""); // Clear the answer field after submission
-    } catch (error) {
-      Alert.alert("❌ Failed to submit answer", error.message);
     }
   };
 

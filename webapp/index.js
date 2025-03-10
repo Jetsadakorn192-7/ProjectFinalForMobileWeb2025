@@ -813,7 +813,7 @@ function AttendanceDetails({ cid, attendanceId }) {
                             <td>{attendee.studentId}</td>
                             <td>{attendee.studentName}</td>
                             <td>{attendee.timestamp?.toDate().toLocaleString()}</td>
-                            <td>{attendee.remark}</td>
+                            <td>{students.remark}</td>
                         </tr>
                     ))}
                 </tbody>
