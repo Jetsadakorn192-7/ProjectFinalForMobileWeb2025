@@ -121,143 +121,76 @@ const markAttendance = async () => {
     Alert.alert("ไม่พบข้อมูลคลาส", "กรุณาเลือกคลาสเรียนก่อน");
     return;
   }
-  
-  if (!checkinCode) {
-    Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสนักศึกษา");
-    return;
-  }
-  
-  if (!/^\d{10}$/.test(checkinCode)) {
-    Alert.alert("รหัสไม่ถูกต้อง", "รหัสนักศึกษา10ตัวไม่ต้องใส่ขีด");
-    return;
-  }
-  
+
   setIsCheckingIn(true);
-  
+
   try {
     const user = auth.currentUser;
     console.log(`Logged in UID: ${user?.uid}`);
-    
+
     if (!user) {
       Alert.alert("กรุณาเข้าสู่ระบบ", "ไม่พบข้อมูลผู้ใช้");
       setModalVisible(false);
       return;
     }
-    
+
     const studentRef = doc(db, "Student", user.uid);
     const studentSnap = await getDoc(studentRef);
-    
+
     if (!studentSnap.exists()) {
       Alert.alert("ไม่พบข้อมูลนักเรียน");
       setModalVisible(false);
       return;
     }
-    
+
     const studentData = studentSnap.data();
     const sid = studentData.studentId || "N/A";
     const username = studentData.username || "ไม่มีชื่อ";
-    
+
     console.log(`Student data: ID=${sid}, Name=${username}`);
     console.log(`Selected Class ID: ${selectedClass.id}`);
-    
-    // Using the correct collection path: classroom/{cid}/checkin
-    const checkInRef = collection(db, "classroom", selectedClass.id, "checkin");
-    
-    // Query for active check-ins
-    const activeCheckinsQuery = query(checkInRef, where("status", "==", 1));
-    const activeCheckinsSnapshot = await getDocs(activeCheckinsQuery);
-    
-    console.log(`Active check-in documents count: ${activeCheckinsSnapshot.size}`);
-    
-    if (activeCheckinsSnapshot.empty) {
-      console.log("No active check-in sessions found");
-      Alert.alert(
-        "ไม่มีการเช็คชื่อที่เปิดอยู่", 
-        "ขณะนี้ยังไม่มีการเปิดเช็คชื่อสำหรับคลาสนี้ กรุณาติดต่ออาจารย์ผู้สอน",
-        [{ text: "เข้าใจแล้ว", onPress: () => setModalVisible(false) }]
-      );
-      return;
-    }
-    
-    // Debugging: Log all active check-in documents
-    activeCheckinsSnapshot.docs.forEach((doc, index) => {
-      console.log(`Active check-in ${index}: ID=${doc.id}, code=${doc.data().checkinCode}`);
-    });
-    
-    let checkinMatched = false;
-    
-    for (const docSnap of activeCheckinsSnapshot.docs) {
-      const docData = docSnap.data();
-      
-      console.log(`Comparing input code: ${checkinCode} with doc code: ${docData.checkinCode}`);
-      
-      if (docData.checkinCode === checkinCode) {
-        checkinMatched = true;
-        console.log(`Match found in document ID: ${docSnap.id}`);
-        
-        // Check if student already checked in for this session
-        const studentDocRef = doc(
-          db,
-          "classroom",
-          selectedClass.id,
-          "checkin",
-          docSnap.id,
-          "Students",
-          user.uid
-        );
-        
-        const existingCheckin = await getDoc(studentDocRef);
-        if (existingCheckin.exists()) {
-          Alert.alert(
-            "เช็คชื่อแล้ว", 
-            "คุณได้ทำการเช็คชื่อสำหรับคาบเรียนนี้ไปแล้ว",
-            [{ text: "ตกลง", onPress: () => setModalVisible(false) }]
-          );
-          return;
-        }
-        
-        const now = new Date();
-        const dateStr = now.toISOString().split("T")[0];
-        const timeStr = now.toLocaleTimeString("en-GB", { hour12: false });
-        const timestamp = now.getTime();
-        
-        console.log(`Saving check-in at path: classroom/${selectedClass.id}/checkin/${docSnap.id}/Students/${user.uid}`);
-        
-        await setDoc(
-          studentDocRef,
-          {
-            studentId: sid,
-            username: username,
-            date: dateStr,
-            time: timeStr,
-            timestamp: timestamp,
-            remark: remark || "ไม่มีหมายเหตุ",
-          }
-        );
-        
-        console.log("Check-in saved successfully");
-        setModalVisible(false);
-        setCheckinCode('');
-        setRemark('');
-        
-        Alert.alert(
-          "เช็คชื่อสำเร็จ", 
-          "บันทึกการเข้าเรียนเรียบร้อยแล้ว",
-          [{ text: "ตกลง" }]
-        );
-        
-        animateSuccess();
-        break;
+
+    // เช็คชื่อได้เลยโดยไม่ต้องตรวจสอบอะไร
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0];
+    const timeStr = now.toLocaleTimeString("en-GB", { hour12: false });
+    const timestamp = now.getTime();
+
+    const studentDocRef = doc(
+      db,
+      "classroom",
+      selectedClass.id,
+      "checkin",
+      user.uid
+    );
+
+    console.log(`Saving check-in at path: classroom/${selectedClass.id}/checkin/${user.uid}`);
+
+    await setDoc(
+      studentDocRef,
+      {
+        studentId: sid,
+        username: username,
+        date: dateStr,
+        time: timeStr,
+        timestamp: timestamp,
+        remark: remark || "ไม่มีหมายเหตุ",
       }
-    }
-    
-    if (!checkinMatched) {
-      console.log("No matching check-in code found");
-      Alert.alert(
-        "รหัสเช็คชื่อไม่ถูกต้อง", 
-        "รหัสเช็คชื่อที่คุณป้อนไม่ตรงกับรหัสสำหรับคาบเรียนนี้ กรุณาตรวจสอบและลองใหม่อีกครั้ง"
-      );
-    }
+    );
+
+    console.log("Check-in saved successfully");
+
+    setModalVisible(false);
+    setCheckinCode('');
+    setRemark('');
+
+    Alert.alert(
+      "เช็คชื่อสำเร็จ",
+      "บันทึกการเข้าเรียนเรียบร้อยแล้ว",
+      [{ text: "ตกลง" }]
+    );
+
+    animateSuccess();
   } catch (error) {
     console.error("เกิดข้อผิดพลาด:", error);
     Alert.alert("ข้อผิดพลาด", `เกิดข้อผิดพลาดในการเช็คชื่อ: ${error.message}`);
@@ -265,6 +198,7 @@ const markAttendance = async () => {
     setIsCheckingIn(false);
   }
 };
+
   // Filter classes based on search text
   const filteredClasses = classes.filter(item =>
     item.name.toLowerCase().includes(searchText.toLowerCase()) ||
