@@ -121,32 +121,42 @@ const markAttendance = async () => {
     Alert.alert("ไม่พบข้อมูลคลาส", "กรุณาเลือกคลาสเรียนก่อน");
     return;
   }
-
+  
+  if (!checkinCode) {
+    Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสนักศึกษา");
+    return;
+  }
+  
+  if (!/^\d{10}$/.test(checkinCode)) {
+    Alert.alert("รหัสไม่ถูกต้อง", "รหัสนักศึกษา10ตัวไม่ต้องใส่ขีด");
+    return;
+  }
+  
   setIsCheckingIn(true);
-
+  
   try {
     const user = auth.currentUser;
     console.log(`Logged in UID: ${user?.uid}`);
-
+    
     if (!user) {
       Alert.alert("กรุณาเข้าสู่ระบบ", "ไม่พบข้อมูลผู้ใช้");
       setModalVisible(false);
       return;
     }
-
+    
     const studentRef = doc(db, "Student", user.uid);
     const studentSnap = await getDoc(studentRef);
-
+    
     if (!studentSnap.exists()) {
       Alert.alert("ไม่พบข้อมูลนักเรียน");
       setModalVisible(false);
       return;
     }
-
+    
     const studentData = studentSnap.data();
     const sid = studentData.studentId || "N/A";
     const username = studentData.username || "ไม่มีชื่อ";
-
+    
     console.log(`Student data: ID=${sid}, Name=${username}`);
     console.log(`Selected Class ID: ${selectedClass.id}`);
     
