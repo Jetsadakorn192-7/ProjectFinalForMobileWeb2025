@@ -652,217 +652,271 @@ const handleDeleteAttendance = async (cid, attendanceId) => {
         alert("เกิดข้อผิดพลาดในการลบการเช็คชื่อ");
     }
 };
-
-// อัพเดทฟังก์ชัน ClassQuestions ให้มีการตรวจสอบและแสดงผลข้อมูลที่ดีขึ้น
 function ClassQuestions({ cid, user }) {
     const [questions, setQuestions] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
-    const [error, setError] = React.useState(null);
+    const [selectedQuestion, setSelectedQuestion] = React.useState(null);
+    const [answers, setAnswers] = React.useState([]);
+    const [loadingAnswers, setLoadingAnswers] = React.useState(false);
+  
+    // ดึงข้อมูลคำถาม
+    React.useEffect(() => {
+      const unsubscribe = db
+        .collection(`classroom/${cid}/question`)
+        .orderBy("timestamp", "desc")
+        .onSnapshot((snapshot) => {
+          const questionsData = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setQuestions(questionsData);
+        });
+  
+      return () => unsubscribe();
+    }, [cid]);
+  
+    // ดึงข้อมูลคำตอบเมื่อเลือกคำถาม
+    React.useEffect(() => {
+      if (selectedQuestion) {
+        setLoadingAnswers(true);
+        const unsubscribe = db
+          .collection(`classroom/${cid}/question/${selectedQuestion}/answers`)
+          .orderBy("timestamp", "desc")
+          .onSnapshot((snapshot) => {
+            const answersData = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            }));
+            setAnswers(answersData);
+            setLoadingAnswers(false);
+          });
+  
+        return () => unsubscribe();
+      }
+    }, [selectedQuestion, cid]);
+  
+    // ส่งคำถามใหม่
+    const askNewQuestion = () => {
+      const questionText = prompt("กรุณากรอกคำถามที่ต้องการส่งถึงอาจารย์:");
+      if (!questionText || questionText.trim() === "") {
+        alert("กรุณากรอกคำถามก่อนส่ง");
+        return;
+      }
+  
+      // ตรวจสอบว่ามี cid และ user หรือไม่
+      if (!cid || !user || !user.uid) {
+        alert("ไม่พบข้อมูลผู้ใช้หรือรหัสวิชา กรุณาลองใหม่อีกครั้ง");
+        return;
+      }
+  
+      // ข้อมูลคำถามที่จะบันทึก
+      const questionData = {
+        text: questionText.trim(),
+        userId: user.uid,
+        userName: user.displayName || "ไม่ระบุชื่อ",
+        userPhoto: user.photoURL || "",
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        status: "active", // สถานะเริ่มต้น
+      };
+  
+      // เพิ่มคำถามลงใน subcollection ของ classroom
+      db.collection("classroom")
+        .doc(cid)
+        .collection("question")
+        .add(questionData)
+        .then((docRef) => {
+          console.log("Question added successfully with ID:", docRef.id);
+          alert("ส่งคำถามเรียบร้อยแล้ว");
+        })
+        .catch((error) => {
+          console.error("Error adding question:", error);
+          alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
+        });
+    };
+  
+    // ลบคำถาม
+    const handleDeleteQuestion = async (questionId) => {
+        if (window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบคำถามนี้?")) {
+          try {
+            await db.collection(`classroom/${cid}/question`).doc(questionId).delete();
+            alert("ลบคำถามเรียบร้อยแล้ว");
+          } catch (error) {
+            console.error("Error deleting question:", error);
+            alert(`เกิดข้อผิดพลาดในการลบคำถาม: ${error.message}`);
+          }
+        }
+    };
+
+    return (
+      <div className="question-container">
+        {/* header section with title and button */}
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h4 className="m-0">คำถามในห้องเรียน</h4>
+          <Button variant="primary" onClick={askNewQuestion}>
+            <i className="fas fa-plus-circle me-1"></i> ถามคำถามใหม่
+          </Button>
+        </div>
+
+        {/* questions list */}
+        {questions.length > 0 ? (
+          <div>
+            {questions.map((question) => (
+              <Card key={question.id} className="mb-3">
+                <Card.Header>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div className="d-flex align-items-center">
+                      {question.userPhoto && (
+                        <img
+                          src={question.userPhoto}
+                          alt="Profile"
+                          className="rounded-circle me-2"
+                          style={{ width: "30px", height: "30px" }}
+                        />
+                      )}
+                      <span className="fw-bold">{question.userName || "ไม่ระบุชื่อ"}</span>
+                      <small className="text-muted ms-2">
+                        {question.timestamp?.toDate().toLocaleString("th-TH") || "ไม่ระบุเวลา"}
+                      </small>
+                    </div>
+                    <div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setSelectedQuestion(question.id)}
+                        className="me-2"
+                      >
+                        <i className="fas fa-comments me-1"></i> ดูคำตอบ
+                      </Button>
+                      {user && user.uid === question.userId && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => handleDeleteQuestion(question.id)}
+                        >
+                          <i className="fas fa-trash me-1"></i> ลบคำถาม
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card.Header>
+                <Card.Body>
+                  <p>{question.text}</p>
+                </Card.Body>
+                {selectedQuestion === question.id && (
+                  <Card.Footer className="bg-light">
+                    <h5 className="mb-3">คำตอบทั้งหมด</h5>
+                    {loadingAnswers ? (
+                      <div className="text-center py-3">
+                        <div className="spinner-border text-primary" role="status">
+                          <span className="visually-hidden">กำลังโหลด...</span>
+                        </div>
+                        <p className="mt-2">กำลังโหลดข้อมูลคำตอบ...</p>
+                      </div>
+                    ) : answers.length > 0 ? (
+                      <Table striped bordered hover>
+                        <thead>
+                          <tr>
+                            <th width="60">ลำดับ</th>
+                            <th>คำตอบ</th>
+                            <th width="200">ผู้ตอบ</th>
+                            <th width="180">เวลาตอบ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {answers.map((answer, index) => (
+                            <tr key={answer.id}>
+                              <td className="text-center">{index + 1}</td>
+                              <td>{answer.answer}</td>
+                              <td>
+                                <div className="d-flex align-items-center">
+                                  {answer.userPhoto && (
+                                    <img
+                                      src={answer.userPhoto}
+                                      alt="User"
+                                      className="rounded-circle me-2"
+                                      style={{ width: "25px", height: "25px" }}
+                                    />
+                                  )}
+                                  {answer.username || "ไม่ระบุชื่อ"}
+                                </div>
+                              </td>
+                              <td>
+                                {answer.timestamp?.toDate().toLocaleString("th-TH") || "ไม่ระบุเวลา"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    ) : (
+                      <Alert variant="info">ยังไม่มีคำตอบ</Alert>
+                    )}
+                  </Card.Footer>
+                )}
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Alert variant="info" className="text-center">
+            <i className="fas fa-info-circle me-2"></i>
+            ยังไม่มีคำถามในห้องเรียนนี้ คุณสามารถถามคำถามใหม่ได้โดยคลิกที่ปุ่ม "ถามคำถามใหม่"
+          </Alert>
+        )}
+      </div>
+    );
+  }
+// ปุ่มแสดงคะแนน
+function ShowScores({ cid, cno }) {
+    const [scores, setScores] = React.useState([]);
 
     React.useEffect(() => {
-        console.log("Fetching questions for course ID:", cid);
-        setLoading(true);
-        setError(null);
-    
-        // ตรวจสอบว่ามี cid หรือไม่
-        if (!cid) {
-            console.error("No course ID provided");
-            setError("ไม่มีรหัสวิชา กรุณาลองใหม่อีกครั้ง");
-            setLoading(false);
-            return;
-        }
-    
-        // สร้างการติดตาม (subscription) ไปยัง subcollection questions
-        const unsubscribe = db.collection("classroom").doc(cid).collection("question")
-            .orderBy("timestamp", "desc")
-            .onSnapshot(
-                (snapshot) => {
-                    console.log("Questions snapshot received, count:", snapshot.docs.length);
-    
-                    const questionsData = snapshot.docs.map((doc) => {
-                        const data = doc.data();
-                        console.log("Question data:", data);
-    
-                        // ตรวจสอบและแปลง timestamp
-                        let formattedTimestamp;
-                        try {
-                            formattedTimestamp = data.timestamp ? data.timestamp.toDate() : new Date();
-                        } catch (e) {
-                            console.error("Error converting timestamp:", e);
-                            formattedTimestamp = new Date();
-                        }
-    
-                        return {
-                            id: doc.id,
-                            ...data,
-                            timestamp: formattedTimestamp
-                        };
-                    });
-    
-                    setQuestions(questionsData);
-                    setLoading(false);
-                },
-                (error) => {
-                    console.error("Error fetching questions:", error);
-                    setError(`เกิดข้อผิดพลาดในการดึงข้อมูล: ${error.message}`);
-                    setLoading(false);
-                }
-            );
-    
-        // ยกเลิกการติดตามเมื่อ Component ถูกลบ
-        return () => {
-            console.log("Unsubscribing from questions snapshot");
-            unsubscribe();
-        };
-    }, [cid]);
+        const unsubscribe = db.collection(`classroom/${cid}/checkin/${cno}/scores`).onSnapshot(snapshot => {
+            setScores(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsubscribe();
+    }, [cid, cno]);
 
-    const askNewQuestion = () => {
-        const questionText = prompt("กรุณากรอกคำถามที่ต้องการส่งถึงอาจารย์:");
-        if (!questionText || questionText.trim() === "") {
-            alert("กรุณากรอกคำถามก่อนส่ง");
-            return;
-        }
-    
-        // ตรวจสอบว่ามี cid และ user หรือไม่
-        if (!cid || !user || !user.uid) {
-            alert("ไม่พบข้อมูลผู้ใช้หรือรหัสวิชา กรุณาลองใหม่อีกครั้ง");
-            return;
-        }
-    
-        // ข้อมูลคำถามที่จะบันทึก
-        const questionData = {
-            text: questionText.trim(),
-            userId: user.uid,
-            userName: user.displayName || "ไม่ระบุชื่อ",
-            userPhoto: user.photoURL || "",
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            status: "pending" // สถานะเริ่มต้น
-        };
-    
-        // เพิ่มคำถามลงใน subcollection ของ classroom
-        db.collection("classroom").doc(cid).collection("question").add(questionData)
-            .then((docRef) => {
-                console.log("Question added successfully with ID:", docRef.id);
-                alert("ส่งคำถามเรียบร้อยแล้ว");
-            })
-            .catch((error) => {
-                console.error("Error adding question:", error);
-                alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
-            });
+    const handleUpdate = (id, field, value) => {
+        db.collection(`classroom/${cid}/checkin/${cno}/scores`).doc(id).update({ [field]: value });
     };
 
     return (
         <div>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-                <h4>คำถามในห้องเรียน</h4>
-                <div>
-                    <Button variant="primary" onClick={askNewQuestion} className="me-2">ถามคำถามใหม่</Button>
-                </div>
-            </div>
-
-            {loading ? (
-                <div className="text-center p-4">
-                    <p>กำลังโหลดข้อมูล...</p>
-                </div>
-            ) : error ? (
-                <Alert variant="danger">
-                    <p>{error}</p>
-                    <Button variant="outline-danger" onClick={() => window.location.reload()}>โหลดหน้าใหม่</Button>
-                </Alert>
-            ) : questions.length > 0 ? (
-                <div>
-                    <p>พบคำถามทั้งหมด {questions.length} รายการ</p>
-
-                    {questions.map((question) => (
-                        <Card key={question.id} className="mb-3">
-                            <Card.Header>
-                                <div className="d-flex align-items-center">
-                                    {question.userPhoto ? (
-                                        <img
-                                            src={question.userPhoto}
-                                            alt="User"
-                                            width="30"
-                                            height="30"
-                                            className="rounded-circle me-2"
-                                        />
-                                    ) : (
-                                        <div className="bg-secondary rounded-circle me-2" style={{ width: 30, height: 30 }}></div>
-                                    )}
-                                    <span className="me-2">{question.userName || "ไม่ระบุชื่อ"}</span>
-                                    <small className="text-muted ms-auto">
-                                        {question.timestamp.toLocaleString('th-TH')}
-                                    </small>
-                                </div>
-                            </Card.Header>
-                            <Card.Body>
-                                <Card.Text>{question.text}</Card.Text>
-
-                                {question.status === "answered" && question.answer && (
-                                    <div className="mt-3 p-3 bg-light rounded">
-                                        <p className="fw-bold">คำตอบ:</p>
-                                        <p>{question.answer}</p>
-                                        {question.answeredByName && (
-                                            <p className="text-muted small mb-0">
-                                                ตอบโดย: {question.answeredByName}
-                                            </p>
-                                        )}
-                                    </div>
-                                )}
-                            </Card.Body>
-                            <Card.Footer className="d-flex justify-content-end">
-                                {user && user.uid && (
-                                    <>
-                                        <Button
-                                            variant="outline-primary"
-                                            size="sm"
-                                            onClick={() => {
-                                                const answer = prompt("กรุณากรอกคำตอบ:");
-                                                if (answer && answer.trim()) {
-                                                    db.collection("questions").doc(question.id).update({
-                                                        answer: answer.trim(),
-                                                        answeredBy: user.uid,
-                                                        answeredByName: user.displayName || "อาจารย์",
-                                                        answeredAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                                        status: "answered"
-                                                    }).then(() => {
-                                                        alert("บันทึกคำตอบเรียบร้อย");
-                                                    }).catch(err => {
-                                                        console.error("Error saving answer:", err);
-                                                        alert("เกิดข้อผิดพลาดในการบันทึกคำตอบ");
-                                                    });
-                                                }
-                                            }}
-                                            className="me-2"
-                                        >
-                                            {question.status === "answered" ? "แก้ไขคำตอบ" : "ตอบคำถาม"}
-                                        </Button>
-                                        <Button
-                                            variant="outline-danger"
-                                            size="sm"
-                                            onClick={() => {
-                                                if (window.confirm("ต้องการลบคำถามนี้ใช่หรือไม่?")) {
-                                                    db.collection("questions").doc(question.id).delete()
-                                                        .then(() => alert("ลบคำถามเรียบร้อย"))
-                                                        .catch(err => {
-                                                            console.error("Error deleting question:", err);
-                                                            alert("เกิดข้อผิดพลาดในการลบคำถาม");
-                                                        });
-                                                }
-                                            }}
-                                        >
-                                            ลบคำถาม
-                                        </Button>
-                                    </>
-                                )}
-                            </Card.Footer>
-                        </Card>
+            <h4>คะแนนการเช็คชื่อ</h4>
+            <Table striped bordered hover>
+                <thead>
+                    <tr>
+                        <th>ลำดับ</th>
+                        <th>รหัส</th>
+                        <th>ชื่อ</th>
+                        <th>หมายเหตุ</th>
+                        <th>วันเวลา</th>
+                        <th>คะแนน</th>
+                        <th>สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {scores.map((s, index) => (
+                        <tr key={s.id}>
+                            <td>{index + 1}</td>
+                            <td>{s.id}</td>
+                            <td>{s.name}</td>
+                            <td>
+                                <input type="text" value={s.remark || ""} onChange={(e) => handleUpdate(s.id, "remark", e.target.value)} />
+                            </td>
+                            <td>{s.timestamp?.toDate().toLocaleString()}</td>
+                            <td>
+                                <input type="number" value={s.score || 0} onChange={(e) => handleUpdate(s.id, "score", parseInt(e.target.value))} />
+                            </td>
+                            <td>
+                                <select value={s.status} onChange={(e) => handleUpdate(s.id, "status", e.target.value)}>
+                                    <option value="1">ผ่าน</option>
+                                    <option value="0">ไม่ผ่าน</option>
+                                </select>
+                            </td>
+                        </tr>
                     ))}
-                </div>
-            ) : (
-                <div className="text-center p-5 bg-light rounded">
-                    <p className="mb-0">ไม่มีคำถามในวิชานี้ กดปุ่ม "ถามคำถามใหม่" เพื่อเริ่มต้น</p>
-                </div>
-            )}
+                </tbody>
+            </Table>
+            <Button variant="success" onClick={() => handleSaveCheckIn(cid, cno)}>บันทึกการเช็คชื่อ</Button>
         </div>
     );
 }

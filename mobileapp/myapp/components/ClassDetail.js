@@ -32,7 +32,7 @@ const ClassDetail = ({ navigation, route }) => {
   const [cno, setCno] = useState(null);
   const [qid, setQid] = useState(null);
   const [courseName, setCourseName] = useState("");
-  const [remark, setRemark] = useState("");
+  
   const [questionShow, setQuestionShow] = useState(false);
   const [questionText, setQuestionText] = useState("");
   const [answer, setAnswer] = useState("");
@@ -81,7 +81,7 @@ const ClassDetail = ({ navigation, route }) => {
   const fetchQuestionId = async (classId) => {
     try {
       const questionCollectionRef = collection(db, `classroom/${classId}/question`);
-      const qQuestion = query(questionCollectionRef, orderBy("timestamp", "desc"), limit(1));
+      const qQuestion = query(questionCollectionRef, orderBy("timestamp", "desc"), limit(2));
       const querySnapshot = await getDocs(qQuestion);
       if (!querySnapshot.empty) {
         const latestQuestionDoc = querySnapshot.docs[0];
@@ -152,18 +152,7 @@ const ClassDetail = ({ navigation, route }) => {
     }
   };
 
-  // บันทึกคำถาม (Remark)
-  const handleSaveRemark = async () => {
-    if (!remark) return Alert.alert("เพิ่มคำถาม");
-    try {
-      const remarkRef = doc(db, `classroom/${cid}/checkin/${cno}/students/${uid}`);
-      await setDoc(remarkRef, { remark }, { merge: true });
-      Alert.alert("✅ ถามคำถามสำเร็จ!");
-      setRemark(""); // เคลียร์ช่องข้อความ
-    } catch (error) {
-      Alert.alert("❌ Failed to save", error.message);
-    }
-  };
+  
 
   // บันทึกคำตอบ
   const handleSubmitAnswer = async () => {
@@ -224,27 +213,6 @@ const ClassDetail = ({ navigation, route }) => {
                 <Text style={styles.courseLabel}>Course Name:</Text>
                 <Text style={styles.courseInfo}>{courseName}</Text>
               </View>
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Ionicons name="create-outline" size={24} color="#053C5E" />
-                <Text style={styles.cardTitle}>เพิ่มคำถาม</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="เพิ่มคำถามตรงนี้"
-                value={remark}
-                onChangeText={setRemark}
-                multiline
-              />
-              <TouchableOpacity
-                style={[styles.button, !remark ? styles.buttonDisabled : null]}
-                onPress={handleSaveRemark}
-                disabled={!remark}
-              >
-                <Text style={styles.buttonText}>บันทึก คำถาม</Text>
-              </TouchableOpacity>
             </View>
 
             {questionShow ? (
