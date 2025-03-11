@@ -10,6 +10,7 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -24,7 +25,6 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db, auth } from "./firebaseConfig";
-import { Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 const ClassDetail = ({ navigation, route }) => {
@@ -38,10 +38,35 @@ const ClassDetail = ({ navigation, route }) => {
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(true);
   const [courseCode, setCourseCode] = useState("");
+  const [questionUser, setQuestionUser] = useState({ userId: "", username: "", userPhoto: "" });
+  const [questionTimestamp, setQuestionTimestamp] = useState(null);
 
   const uid = auth.currentUser?.uid;
 
-  // When component mounts or cid changes
+  // ดึงข้อมูลคำถามจาก Firestore
+  useEffect(() => {
+    if (cid && qid) {
+      const questionRef = doc(db, `classroom/${cid}/question/${qid}`);
+      const unsubscribe = onSnapshot(questionRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setQuestionShow(data.status === "active"); // Check if the question is active
+          setQuestionText(data.text || ""); // Set question text
+          setQuestionTimestamp(data.timestamp); // Set timestamp
+          setQuestionUser({
+            userId: data.userId,
+            username: data.username,
+            userPhoto: data.userPhoto,
+          }); // Set user info
+        } else {
+          setQuestionShow(false); // Hide question if no data exists
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [cid, qid]);
+
+  // ดึงข้อมูลคลาส
   useEffect(() => {
     if (cid) {
       fetchClassData(cid);
@@ -52,46 +77,33 @@ const ClassDetail = ({ navigation, route }) => {
     }
   }, [cid]);
 
-  // Function to fetch the latest question ID
+  // ดึงข้อมูลคำถามล่าสุด
   const fetchQuestionId = async (classId) => {
     try {
       const questionCollectionRef = collection(db, `classroom/${classId}/question`);
-      const qQuestion = query(questionCollectionRef, orderBy("question_no", "desc"), limit(1));
+      const qQuestion = query(questionCollectionRef, orderBy("timestamp", "desc"), limit(1));
       const querySnapshot = await getDocs(qQuestion);
       if (!querySnapshot.empty) {
         const latestQuestionDoc = querySnapshot.docs[0];
         setQid(latestQuestionDoc.id);
+        console.log("Latest question ID:", latestQuestionDoc.id); // Debug log
       } else {
-        setQid(null);
+        setQid(null); // หากไม่มีคำถาม
+        console.log("No questions found in the collection"); // Debug log
       }
     } catch (error) {
       console.error("❌ Error fetching question ID:", error);
     }
   };
 
-  // Subscribe to listen for question_show and question_text changes
-  useEffect(() => {
-    if (cid && qid) {
-      const questionRef = doc(db, `classroom/${cid}/question/${qid}`);
-      const unsubscribe = onSnapshot(questionRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setQuestionShow(data.question_show || false);
-          setQuestionText(data.question_text || "");
-        }
-      });
-      return () => unsubscribe();
-    }
-  }, [qid]);
-
-  // Function to fetch course data
+  // ดึงข้อมูลคลาส
   const fetchClassData = async (classId) => {
     try {
       const classRef = doc(db, "classroom", classId);
       const classSnap = await getDoc(classRef);
       if (classSnap.exists()) {
         setCourseName(classSnap.data().info?.name || "Course name not specified");
-        setCourseCode(classSnap.data().info?.code || "Course code not specified")
+        setCourseCode(classSnap.data().info?.code || "Course code not specified");
       } else {
         Alert.alert("⚠️ Course not found");
       }
@@ -101,7 +113,7 @@ const ClassDetail = ({ navigation, route }) => {
     setLoading(false);
   };
 
-  // Function to fetch the latest check-in
+  // ดึงข้อมูลการเช็คอินล่าสุด
   const fetchLastCheckin = async (classId) => {
     try {
       const checkinRef = collection(db, `classroom/${classId}/checkin`);
@@ -117,7 +129,7 @@ const ClassDetail = ({ navigation, route }) => {
     }
   };
 
-  // Store class data in AsyncStorage
+  // บันทึกข้อมูลคลาสใน AsyncStorage
   const storeData = async (classId, checkinNo) => {
     try {
       await AsyncStorage.setItem("classInfo", JSON.stringify({ classId, checkinNo }));
@@ -126,7 +138,7 @@ const ClassDetail = ({ navigation, route }) => {
     }
   };
 
-  // Load data from AsyncStorage if no cid
+  // โหลดข้อมูลจาก AsyncStorage
   const loadStoredData = async () => {
     try {
       const value = await AsyncStorage.getItem("classInfo");
@@ -140,16 +152,36 @@ const ClassDetail = ({ navigation, route }) => {
     }
   };
 
-  // Function to save remarks
+  // บันทึกคำถาม (Remark)
   const handleSaveRemark = async () => {
     if (!remark) return Alert.alert("เพิ่มคำถาม");
     try {
       const remarkRef = doc(db, `classroom/${cid}/checkin/${cno}/students/${uid}`);
       await setDoc(remarkRef, { remark }, { merge: true });
       Alert.alert("✅ ถามคำถามสำเร็จ!");
-      setRemark(""); // Clear the remark field after saving
+      setRemark(""); // เคลียร์ช่องข้อความ
     } catch (error) {
       Alert.alert("❌ Failed to save", error.message);
+    }
+  };
+
+  // บันทึกคำตอบ
+  const handleSubmitAnswer = async () => {
+    if (!answer) return Alert.alert("Error", "Please enter your answer before submitting.");
+
+    try {
+      const answerRef = doc(db, `classroom/${cid}/question/${qid}/answers`, uid);
+      await setDoc(answerRef, {
+        answer,
+        timestamp: new Date(),
+        userId: uid,
+        username: auth.currentUser?.displayName,
+        userPhoto: auth.currentUser?.photoURL,
+      });
+      Alert.alert("✅ Success", "Your answer has been submitted!");
+      setAnswer(""); // เคลียร์ช่องข้อความ
+    } catch (error) {
+      Alert.alert("❌ Error", error.message);
     }
   };
 
@@ -178,7 +210,7 @@ const ClassDetail = ({ navigation, route }) => {
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.container}>
             <View style={styles.headerContainer}>
-              <Text style={styles.title} >Class Session</Text>
+              <Text style={styles.title}>Class Session</Text>
             </View>
 
             <View style={styles.courseInfoCard}>
@@ -206,8 +238,8 @@ const ClassDetail = ({ navigation, route }) => {
                 onChangeText={setRemark}
                 multiline
               />
-              <TouchableOpacity 
-                style={[styles.button, !remark ? styles.buttonDisabled : null]} 
+              <TouchableOpacity
+                style={[styles.button, !remark ? styles.buttonDisabled : null]}
                 onPress={handleSaveRemark}
                 disabled={!remark}
               >
@@ -215,34 +247,41 @@ const ClassDetail = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
 
-            {questionShow && (
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="help-circle-outline" size={24} color="#053C5E" />
-                  <Text style={styles.cardTitle}>Question</Text>
-                </View>
-                <View style={styles.questionContainer}>
-                  <Text style={styles.questionText}>{questionText}</Text>
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Type your answer here"
-                  value={answer}
-                  onChangeText={setAnswer}
-                  multiline
-                />
-                <TouchableOpacity 
-                  style={[styles.button, !answer ? styles.buttonDisabled : null]} 
-                  onPress={handleSubmitAnswer}
-                  disabled={!answer}
-                >
-                  <Text style={styles.buttonText}>Submit Answer</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {questionShow ? (
+  <View style={styles.card}>
+    <View style={styles.cardHeader}>
+      <Ionicons name="help-circle-outline" size={24} color="#053C5E" />
+      <Text style={styles.cardTitle}>Question</Text>
+    </View>
+    <View style={styles.questionContainer}>
+      <Text style={styles.questionText}>{questionText}</Text>
+      <Text>Asked by: {questionUser.username}</Text>
+      <Image source={{ uri: questionUser.userPhoto }} style={{ width: 50, height: 50 }} />
+      <Text>Timestamp: {new Date(questionTimestamp?.seconds * 1000).toLocaleString()}</Text>
+    </View>
+    <TextInput
+      style={styles.input}
+      placeholder="Type your answer here"
+      value={answer}
+      onChangeText={setAnswer}
+      multiline
+    />
+    <TouchableOpacity
+      style={[styles.button, !answer ? styles.buttonDisabled : null]}
+      onPress={handleSubmitAnswer}
+      disabled={!answer}
+    >
+      <Text style={styles.buttonText}>Submit Answer</Text>
+    </TouchableOpacity>
+  </View>
+) : (
+  <View style={styles.card}>
+    <Text style={styles.noQuestionText}>No questions available at the moment.</Text>
+  </View>
+)}
 
-            <TouchableOpacity 
-              style={styles.exitButton} 
+            <TouchableOpacity
+              style={styles.exitButton}
               onPress={() => navigation.navigate("Home")}
             >
               <Ionicons name="home-outline" size={20} color="#fff" style={styles.buttonIcon} />
@@ -292,11 +331,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "bold",
     color: "#053C5E",
-  },
-  icon: {
-    width: 40,
-    height: 40,
-    marginLeft: 10,
   },
   courseInfoCard: {
     backgroundColor: "white",
@@ -409,6 +443,12 @@ const styles = StyleSheet.create({
   },
   buttonIcon: {
     marginRight: 10,
+  },
+  noQuestionText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    padding: 20,
   },
 });
 

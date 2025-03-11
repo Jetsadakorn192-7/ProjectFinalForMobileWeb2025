@@ -652,6 +652,7 @@ const handleDeleteAttendance = async (cid, attendanceId) => {
         alert("เกิดข้อผิดพลาดในการลบการเช็คชื่อ");
     }
 };
+
 // อัพเดทฟังก์ชัน ClassQuestions ให้มีการตรวจสอบและแสดงผลข้อมูลที่ดีขึ้น
 function ClassQuestions({ cid, user }) {
     const [questions, setQuestions] = React.useState([]);
@@ -662,7 +663,7 @@ function ClassQuestions({ cid, user }) {
         console.log("Fetching questions for course ID:", cid);
         setLoading(true);
         setError(null);
-        
+    
         // ตรวจสอบว่ามี cid หรือไม่
         if (!cid) {
             console.error("No course ID provided");
@@ -670,107 +671,83 @@ function ClassQuestions({ cid, user }) {
             setLoading(false);
             return;
         }
-
-        try {
-            // สร้างการติดตาม (subscription) ไปยังคอลเลกชัน questions
-            const unsubscribe = db.collection("questions")
-                .where("courseId", "==", cid)
-                .orderBy("timestamp", "desc")
-                .onSnapshot(
-                    (snapshot) => {
-                        console.log("Questions snapshot received, count:", snapshot.docs.length);
-                        
-                        const questionsData = snapshot.docs.map(doc => {
-                            const data = doc.data();
-                            console.log("Question data:", data);
-                            
-                            // ตรวจสอบและแปลง timestamp
-                            let formattedTimestamp;
-                            try {
-                                formattedTimestamp = data.timestamp ? data.timestamp.toDate() : new Date();
-                            } catch (e) {
-                                console.error("Error converting timestamp:", e);
-                                formattedTimestamp = new Date();
-                            }
-                            
-                            return {
-                                id: doc.id,
-                                ...data,
-                                timestamp: formattedTimestamp
-                            };
-                        });
-                        
-                        setQuestions(questionsData);
-                        setLoading(false);
-                    },
-                    (error) => {
-                        console.error("Error fetching questions:", error);
-                        setError(`เกิดข้อผิดพลาดในการดึงข้อมูล: ${error.message}`);
-                        setLoading(false);
-                    }
-                );
-
-            // ยกเลิกการติดตามเมื่อ Component ถูกลบ
-            return () => {
-                console.log("Unsubscribing from questions snapshot");
-                unsubscribe();
-            };
-        } catch (error) {
-            console.error("Exception in setting up snapshot:", error);
-            setError(`เกิดข้อผิดพลาดในการตั้งค่าการดึงข้อมูล: ${error.message}`);
-            setLoading(false);
-        }
+    
+        // สร้างการติดตาม (subscription) ไปยัง subcollection questions
+        const unsubscribe = db.collection("classroom").doc(cid).collection("question")
+            .orderBy("timestamp", "desc")
+            .onSnapshot(
+                (snapshot) => {
+                    console.log("Questions snapshot received, count:", snapshot.docs.length);
+    
+                    const questionsData = snapshot.docs.map((doc) => {
+                        const data = doc.data();
+                        console.log("Question data:", data);
+    
+                        // ตรวจสอบและแปลง timestamp
+                        let formattedTimestamp;
+                        try {
+                            formattedTimestamp = data.timestamp ? data.timestamp.toDate() : new Date();
+                        } catch (e) {
+                            console.error("Error converting timestamp:", e);
+                            formattedTimestamp = new Date();
+                        }
+    
+                        return {
+                            id: doc.id,
+                            ...data,
+                            timestamp: formattedTimestamp
+                        };
+                    });
+    
+                    setQuestions(questionsData);
+                    setLoading(false);
+                },
+                (error) => {
+                    console.error("Error fetching questions:", error);
+                    setError(`เกิดข้อผิดพลาดในการดึงข้อมูล: ${error.message}`);
+                    setLoading(false);
+                }
+            );
+    
+        // ยกเลิกการติดตามเมื่อ Component ถูกลบ
+        return () => {
+            console.log("Unsubscribing from questions snapshot");
+            unsubscribe();
+        };
     }, [cid]);
 
     const askNewQuestion = () => {
         const questionText = prompt("กรุณากรอกคำถามที่ต้องการส่งถึงอาจารย์:");
-        if (!questionText || questionText.trim() === "") return;
-        
-        console.log("Adding new question to course:", cid);
-        
+        if (!questionText || questionText.trim() === "") {
+            alert("กรุณากรอกคำถามก่อนส่ง");
+            return;
+        }
+    
+        // ตรวจสอบว่ามี cid และ user หรือไม่
+        if (!cid || !user || !user.uid) {
+            alert("ไม่พบข้อมูลผู้ใช้หรือรหัสวิชา กรุณาลองใหม่อีกครั้ง");
+            return;
+        }
+    
         // ข้อมูลคำถามที่จะบันทึก
         const questionData = {
             text: questionText.trim(),
-            courseId: cid,
             userId: user.uid,
             userName: user.displayName || "ไม่ระบุชื่อ",
             userPhoto: user.photoURL || "",
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            status: "pending"
+            status: "pending" // สถานะเริ่มต้น
         };
-        
-        console.log("Question data to save:", questionData);
-        
-        db.collection("questions").add(questionData)
-        .then((docRef) => {
-            console.log("Question added successfully with ID:", docRef.id);
-            alert("ส่งคำถามเรียบร้อยแล้ว");
-        })
-        .catch(error => {
-            console.error("Error adding question:", error);
-            alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
-        });
-    };
-
-    // ฟังก์ชันสำหรับตรวจสอบโครงสร้างฐานข้อมูล
-    const debugDatabase = () => {
-        console.log("Debugging database for course ID:", cid);
-        
-        // ตรวจสอบว่าคอลเลกชัน questions มีอยู่หรือไม่
-        db.collection("questions").get()
-            .then(snapshot => {
-                console.log("Total questions in database:", snapshot.docs.length);
-                
-                // ดึงข้อมูลทั้งหมดโดยไม่มีเงื่อนไข where
-                snapshot.docs.forEach(doc => {
-                    console.log("Question ID:", doc.id, "Data:", doc.data());
-                });
-                
-                alert(`จำนวนคำถามทั้งหมดในฐานข้อมูล: ${snapshot.docs.length}`);
+    
+        // เพิ่มคำถามลงใน subcollection ของ classroom
+        db.collection("classroom").doc(cid).collection("question").add(questionData)
+            .then((docRef) => {
+                console.log("Question added successfully with ID:", docRef.id);
+                alert("ส่งคำถามเรียบร้อยแล้ว");
             })
-            .catch(error => {
-                console.error("Error checking questions collection:", error);
-                alert(`เกิดข้อผิดพลาดในการตรวจสอบฐานข้อมูล: ${error.message}`);
+            .catch((error) => {
+                console.error("Error adding question:", error);
+                alert(`เกิดข้อผิดพลาดในการส่งคำถาม: ${error.message}`);
             });
     };
 
@@ -780,10 +757,9 @@ function ClassQuestions({ cid, user }) {
                 <h4>คำถามในห้องเรียน</h4>
                 <div>
                     <Button variant="primary" onClick={askNewQuestion} className="me-2">ถามคำถามใหม่</Button>
-                    {/* <Button variant="secondary" onClick={debugDatabase}>ตรวจสอบฐานข้อมูล</Button> */}
                 </div>
             </div>
-            
+
             {loading ? (
                 <div className="text-center p-4">
                     <p>กำลังโหลดข้อมูล...</p>
@@ -796,18 +772,18 @@ function ClassQuestions({ cid, user }) {
             ) : questions.length > 0 ? (
                 <div>
                     <p>พบคำถามทั้งหมด {questions.length} รายการ</p>
-                    
+
                     {questions.map((question) => (
                         <Card key={question.id} className="mb-3">
                             <Card.Header>
                                 <div className="d-flex align-items-center">
                                     {question.userPhoto ? (
-                                        <img 
-                                            src={question.userPhoto} 
-                                            alt="User" 
-                                            width="30" 
-                                            height="30" 
-                                            className="rounded-circle me-2" 
+                                        <img
+                                            src={question.userPhoto}
+                                            alt="User"
+                                            width="30"
+                                            height="30"
+                                            className="rounded-circle me-2"
                                         />
                                     ) : (
                                         <div className="bg-secondary rounded-circle me-2" style={{ width: 30, height: 30 }}></div>
@@ -820,7 +796,7 @@ function ClassQuestions({ cid, user }) {
                             </Card.Header>
                             <Card.Body>
                                 <Card.Text>{question.text}</Card.Text>
-                                
+
                                 {question.status === "answered" && question.answer && (
                                     <div className="mt-3 p-3 bg-light rounded">
                                         <p className="fw-bold">คำตอบ:</p>
@@ -836,8 +812,8 @@ function ClassQuestions({ cid, user }) {
                             <Card.Footer className="d-flex justify-content-end">
                                 {user && user.uid && (
                                     <>
-                                        <Button 
-                                            variant="outline-primary" 
+                                        <Button
+                                            variant="outline-primary"
                                             size="sm"
                                             onClick={() => {
                                                 const answer = prompt("กรุณากรอกคำตอบ:");
@@ -860,8 +836,8 @@ function ClassQuestions({ cid, user }) {
                                         >
                                             {question.status === "answered" ? "แก้ไขคำตอบ" : "ตอบคำถาม"}
                                         </Button>
-                                        <Button 
-                                            variant="outline-danger" 
+                                        <Button
+                                            variant="outline-danger"
                                             size="sm"
                                             onClick={() => {
                                                 if (window.confirm("ต้องการลบคำถามนี้ใช่หรือไม่?")) {
@@ -887,63 +863,6 @@ function ClassQuestions({ cid, user }) {
                     <p className="mb-0">ไม่มีคำถามในวิชานี้ กดปุ่ม "ถามคำถามใหม่" เพื่อเริ่มต้น</p>
                 </div>
             )}
-        </div>
-    );
-}
-// ปุ่มแสดงคะแนน
-function ShowScores({ cid, cno }) {
-    const [scores, setScores] = React.useState([]);
-
-    React.useEffect(() => {
-        const unsubscribe = db.collection(`classroom/${cid}/checkin/${cno}/scores`).onSnapshot(snapshot => {
-            setScores(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        return () => unsubscribe();
-    }, [cid, cno]);
-
-    const handleUpdate = (id, field, value) => {
-        db.collection(`classroom/${cid}/checkin/${cno}/scores`).doc(id).update({ [field]: value });
-    };
-
-    return (
-        <div>
-            <h4>คะแนนการเช็คชื่อ</h4>
-            <Table striped bordered hover>
-                <thead>
-                    <tr>
-                        <th>ลำดับ</th>
-                        <th>รหัส</th>
-                        <th>ชื่อ</th>
-                        <th>หมายเหตุ</th>
-                        <th>วันเวลา</th>
-                        <th>คะแนน</th>
-                        <th>สถานะ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {scores.map((s, index) => (
-                        <tr key={s.id}>
-                            <td>{index + 1}</td>
-                            <td>{s.id}</td>
-                            <td>{s.name}</td>
-                            <td>
-                                <input type="text" value={s.remark || ""} onChange={(e) => handleUpdate(s.id, "remark", e.target.value)} />
-                            </td>
-                            <td>{s.timestamp?.toDate().toLocaleString()}</td>
-                            <td>
-                                <input type="number" value={s.score || 0} onChange={(e) => handleUpdate(s.id, "score", parseInt(e.target.value))} />
-                            </td>
-                            <td>
-                                <select value={s.status} onChange={(e) => handleUpdate(s.id, "status", e.target.value)}>
-                                    <option value="1">ผ่าน</option>
-                                    <option value="0">ไม่ผ่าน</option>
-                                </select>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </Table>
-            <Button variant="success" onClick={() => handleSaveCheckIn(cid, cno)}>บันทึกการเช็คชื่อ</Button>
         </div>
     );
 }
