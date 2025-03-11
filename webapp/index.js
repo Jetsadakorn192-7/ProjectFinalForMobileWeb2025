@@ -273,7 +273,7 @@ function ManageCourse({ course, app }) {
             <a className={`nav-link ${tab === "details" ? "active" : ""}`} onClick={() => setTab("details")}>รายละเอียด</a>
             <a className={`nav-link ${tab === "qrcode" ? "active" : ""}`} onClick={() => setTab("qrcode")}>QR Code</a>
             <a className={`nav-link ${tab === "students" ? "active" : ""}`} onClick={() => setTab("students")}>นักเรียน</a>
-            <a className={`nav-link ${tab === "attendance" ? "active" : ""}`} onClick={() => setTab("attendance")}>เช็คชื่อ</a>
+            <a className={`nav-link ${tab === "checkin" ? "active" : ""}`} onClick={() => setTab("checkin")}>เช็คชื่อ</a>
             <a className={`nav-link ${tab === "questions" ? "active" : ""}`} onClick={() => setTab("questions")}>คำถาม</a>
             <a className={`nav-link ${tab === "assignments" ? "active" : ""}`} onClick={() => setTab("assignments")}>โจทย์และงาน</a>
           </nav>
@@ -281,7 +281,7 @@ function ManageCourse({ course, app }) {
             {tab === "details" && <CourseDetails course={course} />}
             {tab === "qrcode" && <CourseQRCode cid={course.id} />}
             {tab === "students" && <StudentList cid={course.id} />}
-            {tab === "attendance" && <Attendance cid={course.id} />}
+            {tab === "checkin" && <StudentCheckIn cid={course.id} />}
             {tab === "questions" && <ClassQuestions cid={course.id} user={app.state.user} />}
             {tab === "assignments" && <ClassAssignments cid={course.id} user={app.state.user} />}
           </div>
@@ -948,99 +948,210 @@ function ShowScores({ cid, cno }) {
     );
 }
 
-// ปุ่มลบรายชื่อนักศึกษา
-const handleDeleteStudent = async (cid, cno, studentId) => {
-    try {
-      await deleteDoc(doc(db, `classroom/${cid}/checkin/${cno}/students`, studentId));
-      alert('ลบนักศึกษาสำเร็จ');
-    } catch (error) {
-      console.error('Error deleting student:', error);
-      alert('เกิดข้อผิดพลาดในการลบนักศึกษา');
-    }
-  };
+// ฟังก์ชันจัดการการเช็คชื่อ
+function StudentCheckIn({ cid }) {
+    const [checkins, setCheckins] = React.useState([]);
+    const [selectedCheckin, setSelectedCheckin] = React.useState(null);
 
-// ปุ่มแสดงรายชื่อนักศึกษาที่เช็คชื่อ
-// function StudentCheckInList({ cid, cno }) {
-//     const [students, setStudents] = React.useState([]);
-//     const [loading, setLoading] = React.useState(true);
-//     const [error, setError] = React.useState(null);
+    React.useEffect(() => {
+        const unsubscribe = db.collection(`classroom/${cid}/checkin`)
+            .orderBy('date', 'desc')
+            .onSnapshot((querySnapshot) => {
+                const checkinData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }));
+                setCheckins(checkinData);
+            });
+
+        return () => unsubscribe();
+    }, [cid]);
+
+    const handleAddCheckin = async () => {
+        const newCheckinRef = db.collection(`classroom/${cid}/checkin`).doc();
+        await newCheckinRef.set({
+            date: firebase.firestore.Timestamp.now(),
+            students: [], // เปลี่ยนจาก attendees เป็น students ตามโครงสร้างข้อมูลใหม่
+            status: 1, // สถานะเริ่มต้นคือเปิด (1)
+        });
+        alert("เพิ่มการเช็คชื่อสำเร็จ");
+    };
+
+    const handleDeleteCheckin = async (classId, checkinId) => {
+        if (window.confirm("คุณต้องการลบการเช็คชื่อนี้หรือไม่?")) {
+            try {
+                await db.collection(`classroom/${classId}/checkin`).doc(checkinId).delete();
+                alert("ลบการเช็คชื่อสำเร็จ");
+            } catch (error) {
+                console.error("เกิดข้อผิดพลาดในการลบการเช็คชื่อ:", error);
+                alert("เกิดข้อผิดพลาดในการลบการเช็คชื่อ");
+            }
+        }
+    };
+
+    const handleToggleStatus = async (checkinId) => {
+        const checkinRef = db.collection(`classroom/${cid}/checkin`).doc(checkinId);
+        const checkinDoc = await checkinRef.get();
+        if (checkinDoc.exists) {
+            const currentStatus = checkinDoc.data().status;
+            await checkinRef.update({
+                status: currentStatus === 1 ? 0 : 1, // เปลี่ยนสถานะ
+            });
+            alert("สถานะการเช็คชื่อเปลี่ยนเรียบร้อยแล้ว");
+        }
+    };
+
+    return (
+        <div>
+            <button onClick={handleAddCheckin}>เพิ่มการเช็คชื่อ</button>
+            <h5>ประวัติการเช็คชื่อ</h5>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ลำดับ</th>
+                        <th>วัน-เวลา</th>
+                        {/* <th>จำนวนนักเรียนเข้าเรียน</th> */}
+                        <th>สถานะ</th> {/* เพิ่มคอลัมน์สถานะ */}
+                        <th>จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {checkins.map((checkin, index) => (
+                        <tr key={checkin.id}>
+                            <td>{index + 1}</td>
+                            <td>{checkin.date.toDate().toLocaleString()}</td>
+                            {/* <td>{checkin.Students ? checkin.Students.length : ""}</td> */}
+                            <td>{checkin.status === 1 ? "เปิด" : "ปิด"}</td> {/* แสดงสถานะ */}
+                            <td>
+                                <button onClick={() => setSelectedCheckin(checkin.id)}>
+                                    ดูรายละเอียด
+                                </button>
+                                <button onClick={() => handleDeleteCheckin(cid, checkin.id)}>
+                                    ลบการเช็คชื่อ
+                                </button>
+                                <button onClick={() => handleToggleStatus(checkin.id)}>
+                                    {checkin.status === 1 ? "ปิด" : "เปิด"} สถานะ
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+
+            {selectedCheckin && (
+                <div>
+                    <StudentCheckInList cid={cid} checkinId={selectedCheckin} />
+                    <button onClick={() => setSelectedCheckin(null)}>ปิดรายละเอียด</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ฟังก์ชันแสดงรายชื่อนักศึกษาที่เช็คชื่อ
+function StudentCheckInList({ cid, checkinId: cno }) {
+    const [students, setStudents] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
   
-//     React.useEffect(() => {
-//       if (!cid || !cno) {
-//         setError('Invalid class ID or check-in number');
-//         setLoading(false);
-//         return;
-//       }
+    React.useEffect(() => {
+        if (!cid || !cno) {
+          console.error("Missing parameters:", { cid, cno });
+          setError('Invalid class ID or check-in number');
+          setLoading(false);
+          return;
+        }
+      
+        try {
+          const unsubscribe = db
+            .collection(`classroom/${cid}/checkin/${cno}/Students`)
+            .onSnapshot(
+              (snapshot) => {
+                const studentList = snapshot.docs.map((doc) => ({
+                  id: doc.id,
+                  ...doc.data(),
+                }));
+                setStudents(studentList);
+                setLoading(false);
+              },
+              (error) => {
+                console.error("Firestore error:", error);
+                setError(`Failed to fetch student list: ${error.message}`);
+                setLoading(false);
+              }
+            );
+      
+          return () => unsubscribe();
+        } catch (err) {
+          console.error("Unexpected error:", err);
+          setError(`An unexpected error occurred: ${err.message}`);
+          setLoading(false);
+        }
+      }, [cid, cno]);
   
-//       const unsubscribe = onSnapshot(
-//         collection(db, `classroom/${cid}/checkin/${cno}/students`),
-//         (snapshot) => {
-//           const studentList = snapshot.docs.map((doc) => ({
-//             id: doc.id,
-//             ...doc.data(),
-//           }));
-//           setStudents(studentList);
-//           setLoading(false);
-//         },
-//         (error) => {
-//           setError('Failed to fetch student list');
-//           setLoading(false);
-//         }
-//       );
+    const handleDeleteStudent = async (classId, checkInNo, studentId) => {
+      if (!classId || !checkInNo || !studentId) {
+        alert('ไม่สามารถลบข้อมูลได้ เนื่องจากข้อมูลไม่ครบถ้วน');
+        return;
+      }
+      
+      try {
+        if (window.confirm('ต้องการลบข้อมูลนักศึกษานี้จริงหรือไม่?')) {
+          const docRef = db.doc(`classroom/${classId}/checkin/${checkInNo}/Students/${studentId}`);
+          await docRef.delete();
+        }
+      } catch (error) {
+        console.error("Error deleting student:", error);
+        alert(`ไม่สามารถลบข้อมูลได้: ${error.message}`);
+      }
+    };
   
-//       return () => unsubscribe();
-//     }, [cid, cno]);
+    if (loading) {
+      return <div>Loading...</div>;
+    }
   
-//     if (loading) {
-//       return <div>Loading...</div>;
-//     }
+    if (error) {
+      return <div>{error}</div>;
+    }
   
-//     if (error) {
-//       return <div style={{ color: 'red' }}>{error}</div>;
-//     }
-  
-//     return (
-//       <div>
-//         <h4>รายชื่อผู้เช็คชื่อ</h4>
-//         <Table striped bordered hover>
-//           <thead>
-//             <tr>
-//               <th>ลำดับ</th>
-//               <th>รหัสนักศึกษา</th>
-//               <th>ชื่อนักศึกษา</th>
-//               <th>หมายเหตุ</th>
-//               <th>วันเวลา</th>
-//               <th>จัดการ</th>
-//             </tr>
-//           </thead>
-//           <tbody>
-//             {students.length > 0 ? (
-//               students.map((s, index) => (
-//                 <tr key={s.id}>
-//                   <td>{index + 1}</td>
-//                   <td>{s.studentId}</td>
-//                   <td>{s.username}</td>
-//                   <td>{s.remark}</td>
-//                   <td>{s.time}</td>
-//                   <td>
-//                     <Button variant="danger" onClick={() => handleDeleteStudent(cid, cno, s.id)}>
-//                       ลบ
-//                     </Button>
-//                   </td>
-//                 </tr>
-//               ))
-//             ) : (
-//               <tr>
-//                 <td colSpan="6" style={{ textAlign: 'center' }}>
-//                   ไม่มีข้อมูลการเช็คชื่อ
-//                 </td>
-//               </tr>
-//             )}
-//           </tbody>
-//         </Table>
-//       </div>
-//     );
-//   }
+    return (
+      <div>
+        <h4>รายชื่อผู้เช็คชื่อ</h4>
+        {students.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>ลำดับ</th>
+                <th>รหัสนักศึกษา</th>
+                <th>ชื่อนักศึกษา</th>
+                <th>หมายเหตุ</th>
+                <th>วันเวลา</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((s, index) => (
+                <tr key={s.id}>
+                  <td>{index + 1}</td>
+                  <td>{s.studentId}</td>
+                  <td>{s.username}</td>
+                  <td>{s.remark || "-"}</td>
+                  <td>{s.time}</td>
+                  <td>
+                    <button onClick={() => handleDeleteStudent(cid, cno, s.id)}>
+                      ลบ
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div>ไม่มีข้อมูลการเช็คชื่อ</div>
+        )}
+      </div>
+    );
+}
   
 class App extends React.Component {
     state = {

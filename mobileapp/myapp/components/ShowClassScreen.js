@@ -17,17 +17,14 @@ import {
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-import {
-  auth,
-  db,
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  setDoc,
-  query,
-  where,
-} from "./firebaseConfig";
+import { getFirestore, collection, query, where, orderBy, limit, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
+
+import { getAuth } from "firebase/auth";
+import { app } from "./firebaseConfig"; // ตรวจสอบว่า `firebaseConfig.js` มีการตั้งค่า `app`
+
+// กำหนดค่าตัวแปร auth และ db
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 const ShowClassScreen = ({ navigation }) => {
   const [classes, setClasses] = useState([]);
@@ -122,7 +119,7 @@ const markAttendance = async () => {
     return;
   }
   
-  if (!checkinCode) {
+  if (!checkinCode) { 
     Alert.alert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกรหัสนักศึกษา");
     return;
   }
@@ -160,22 +157,29 @@ const markAttendance = async () => {
     console.log(`Student data: ID=${sid}, Name=${username}`);
     console.log(`Selected Class ID: ${selectedClass.id}`);
     
-    // สร้างเซสชันการเช็คชื่อใหม่หากไม่มีเซสชันที่เปิดอยู่
+    // ✅ ค้นหาเซสชันเช็คชื่อที่เปิดอยู่ (เอา orderBy ออกก่อน)
     const checkInRef = collection(db, "classroom", selectedClass.id, "checkin");
-    const newCheckinRef = doc(checkInRef);
+    const checkInQuery = query(checkInRef, where("status", "==", 1), limit(1));
+
+    const checkInSnapshot = await getDocs(checkInQuery);
+    
+    if (checkInSnapshot.empty) {
+      Alert.alert("ไม่มีเซสชันเช็คชื่อที่เปิดอยู่", "โปรดติดต่ออาจารย์ผู้สอน");
+      setModalVisible(false);
+      return;
+    }
+    
+    const checkInDoc = checkInSnapshot.docs[0]; // ดึงเซสชันแรกที่พบ
+    const checkInId = checkInDoc.id;
+
+    console.log(`Found active check-in session: ${checkInId}`);
     
     const now = new Date();
-    const dateStr = now.toISOString().split("T");
+    const dateStr = now.toISOString().split("T")[0];
     const timeStr = now.toLocaleTimeString("en-GB", { hour12: false });
     const timestamp = now.getTime();
     
-    await setDoc(newCheckinRef, {
-      status: 1,
-      checkinCode: checkinCode,
-      createdAt: timestamp,
-    });
-    
-    const studentDocRef = doc(newCheckinRef, "Students", user.uid);
+    const studentDocRef = doc(db, "classroom", selectedClass.id, "checkin", checkInId, "Students", user.uid);
     
     await setDoc(studentDocRef, {
       studentId: sid,
@@ -185,7 +189,7 @@ const markAttendance = async () => {
       timestamp: timestamp,
       remark: remark || "ไม่มีหมายเหตุ",
     });
-    
+
     console.log("Check-in saved successfully");
     setModalVisible(false);
     setCheckinCode('');
