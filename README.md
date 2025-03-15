@@ -14,6 +14,8 @@
 
 **Web Application สำหรับอาจารย์**  :   [Click here](https://jetsadakorn192-7.github.io/ProjectFinalForMobileWeb2025/?fbclid=IwY2xjawIv7x5leHRuA2FlbQIxMAABHZWijwm31x5OAwroxsb5L40QoIdlImLeHq8gFvPZWeN3Fibum4TuQ3uvqA_aem_RwYKFIIylwSlKyheZQr0jw) 
 
+**Mobile Application สำหรับนักเรียน**  :   [Click here](https://expo.dev/preview/update?message=Done&updateRuntimeVersion=1.0.0&createdAt=2025-03-15T08%3A41%3A31.569Z&slug=exp&projectId=541f6697-b1c8-4d85-b0c8-12b501ed6770&group=646a9854-140c-461b-8530-2ffdb6b6f2fc)
+
 ## คุณสมบัติ
 - เข้าสู่ระบบ
   - เข้าสู่ระบบด้วยบัญชี Google 
